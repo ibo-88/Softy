@@ -22,6 +22,7 @@ from telethon.errors import FloodWaitError, UserBannedError, ChatWriteForbiddenE
 from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest
 from telethon.tl.functions.channels import JoinChannelRequest
+from telethon.tl.types import InputPeerChannel, InputPeerChat, InputPeerUser
 import requests
 
 # Настройка логирования
@@ -97,6 +98,43 @@ class DatabaseManager:
                 username TEXT,
                 reason TEXT,
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица парсинга
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS parsed_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                user_id TEXT,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                phone TEXT,
+                bio TEXT,
+                is_bot BOOLEAN DEFAULT 0,
+                is_verified BOOLEAN DEFAULT 0,
+                is_premium BOOLEAN DEFAULT 0,
+                last_seen INTEGER,
+                common_chats_count INTEGER DEFAULT 0,
+                parsed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица кампаний
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                message TEXT,
+                target_count INTEGER,
+                sent_count INTEGER DEFAULT 0,
+                success_count INTEGER DEFAULT 0,
+                error_count INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP
             )
         ''')
         
@@ -389,6 +427,7 @@ class AccountManager:
                 proxy_data = {'ip': ip, 'port': port, 'username': username, 'password': password}
             
             thread = threading.Thread(target=check_account, args=(account_id, session_file, api_id, api_hash, proxy_data))
+            thread.daemon = True
             thread.start()
             threads.append(thread)
         
@@ -787,6 +826,110 @@ class ParsingManager:
     def __init__(self, db_manager):
         self.db = db_manager
         self.active_tasks = {}
+    
+    def parse_channel(self, channel_link, max_users=1000):
+        """Парсинг участников канала"""
+        try:
+            # Получаем активный аккаунт
+            active_account = self.get_active_account()
+            if not active_account:
+                logger.error("Нет активных аккаунтов для парсинга")
+                return False
+            
+            client = TelegramClient(active_account['session_file'], active_account['api_id'], active_account['api_hash'])
+            
+            # Настраиваем прокси если есть
+            if active_account['proxy']:
+                proxy = {
+                    'proxy_type': 'http',
+                    'addr': active_account['proxy']['ip'],
+                    'port': active_account['proxy']['port'],
+                    'username': active_account['proxy']['username'],
+                    'password': active_account['proxy']['password']
+                }
+                client.set_proxy(proxy)
+            
+            with client:
+                # Получаем информацию о канале
+                entity = client.get_entity(channel_link)
+                
+                # Парсим участников
+                participants = client.get_participants(entity, limit=max_users)
+                
+                # Сохраняем в базу данных
+                conn = sqlite3.connect(self.db.db_path)
+                cursor = conn.cursor()
+                
+                parsed_count = 0
+                for participant in participants:
+                    try:
+                        cursor.execute('''
+                            INSERT OR IGNORE INTO parsed_users (user_id, username, first_name, last_name, phone, bio, is_bot, is_verified, is_premium)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            str(participant.id),
+                            participant.username or '',
+                            participant.first_name or '',
+                            participant.last_name or '',
+                            participant.phone or '',
+                            participant.about or '',
+                            getattr(participant, 'bot', False),
+                            getattr(participant, 'verified', False),
+                            getattr(participant, 'premium', False)
+                        ))
+                        parsed_count += 1
+                    except Exception as e:
+                        logger.error(f"Ошибка сохранения участника: {e}")
+                        continue
+                
+                conn.commit()
+                conn.close()
+                
+                logger.info(f"Парсинг завершен: {parsed_count} участников из канала {channel_link}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Ошибка парсинга канала {channel_link}: {e}")
+            return False
+    
+    def get_active_account(self):
+        """Получение активного аккаунта для парсинга"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT a.id, a.session_file, a.api_id, a.api_hash, p.ip, p.port, p.username, p.password
+                FROM accounts a
+                LEFT JOIN proxies p ON a.proxy_id = p.id
+                WHERE a.status = 'online' AND a.api_id IS NOT NULL
+                ORDER BY RANDOM()
+                LIMIT 1
+            ''')
+            
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                account = {
+                    'id': result[0],
+                    'session_file': result[1],
+                    'api_id': result[2],
+                    'api_hash': result[3],
+                    'proxy': None
+                }
+                
+                if result[4]:
+                    account['proxy'] = {
+                        'ip': result[4], 'port': result[5],
+                        'username': result[6], 'password': result[7]
+                    }
+                
+                return account
+            
+            return None
+        except Exception as e:
+            logger.error(f"Ошибка получения активного аккаунта: {e}")
+            return None
     
     def analyze_audience(self, task_id):
         """Анализ собранной аудитории"""
@@ -1215,7 +1358,7 @@ class SpamManager:
                 
         except FloodWaitError as e:
             logger.warning(f"FloodWait для аккаунта {account['id']}: {e.seconds} сек")
-            time.sleep(e.seconds)
+            time.sleep(min(e.seconds, 300))  # Максимум 5 минут ожидания
             return False
         except UserBannedError:
             logger.warning(f"Пользователь {username} заблокировал бота")
@@ -1291,7 +1434,16 @@ def extract_api_from_session(session_file):
         cursor.execute("SELECT api_id, api_hash FROM sessions WHERE dc_id = 2")
         result = cursor.fetchone()
         
-        if result:
+        if result and result[0] and result[1]:
+            conn.close()
+            return result[0], result[1]
+        
+        # Пробуем альтернативный способ
+        cursor.execute("SELECT api_id, api_hash FROM sessions LIMIT 1")
+        result = cursor.fetchone()
+        
+        if result and result[0] and result[1]:
+            conn.close()
             return result[0], result[1]
         
         conn.close()
@@ -1440,7 +1592,7 @@ def mass_check():
     """Массовая проверка аккаунтов"""
     try:
         count = account_manager.mass_check_accounts()
-        return jsonify({'success': True, 'count': count})
+        return jsonify({'success': True, 'count': count, 'message': f'Запущена проверка {count} аккаунтов'})
     except Exception as e:
         logger.error(f"Ошибка массовой проверки: {e}")
         return jsonify({'error': str(e)}), 500
@@ -1530,6 +1682,29 @@ def get_spam_stats(campaign_id):
             
     except Exception as e:
         logger.error(f"Ошибка получения статистики: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/upload-sessions', methods=['POST'])
+def upload_sessions():
+    """Загрузка сессий из папки"""
+    try:
+        data = request.json
+        folder_path = data.get('folder_path')
+        
+        if not folder_path:
+            return jsonify({'error': 'Не указан путь к папке'}), 400
+        
+        # Загружаем сессии через AccountManager
+        count = account_manager.load_sessions_from_folder(folder_path)
+        
+        return jsonify({
+            'success': True,
+            'count': count,
+            'message': f'Загружено {count} сессий'
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка загрузки сессий: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/upload-usernames', methods=['POST'])
@@ -1706,6 +1881,28 @@ def export_report():
             
     except Exception as e:
         logger.error(f"Ошибка экспорта отчета: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/parse-channel', methods=['POST'])
+def parse_channel():
+    """Парсинг канала"""
+    try:
+        data = request.json
+        channel_link = data.get('channel_link')
+        max_users = data.get('max_users', 1000)
+        
+        if not channel_link:
+            return jsonify({'error': 'Не указана ссылка на канал'}), 400
+        
+        success = parsing_manager.parse_channel(channel_link, max_users)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Парсинг запущен'})
+        else:
+            return jsonify({'error': 'Не удалось запустить парсинг'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка парсинга канала: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analyze-audience/<int:task_id>', methods=['GET'])

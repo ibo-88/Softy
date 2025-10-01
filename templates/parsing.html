@@ -347,33 +347,55 @@ function validateParsingForm() {
 function startParsingTask(formData) {
     showLoadingModal();
     
-    // Имитация API запроса
-    setTimeout(() => {
+    // Отправляем запрос на парсинг
+    fetch('/api/parse-channel', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            channel_link: formData.channel_link,
+            max_users: formData.max_members
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
         hideLoadingModal();
         
-        const task = {
-            id: Date.now(),
-            name: formData.name,
-            source_type: formData.source_type,
-            source_data: JSON.stringify(formData),
-            status: 'running',
-            results_count: 0,
-            created_at: new Date().toISOString()
-        };
-        
-        parsingTasks.unshift(task);
-        displayParsingTasks();
-        addParsingLog(`Задача "${formData.name}" запущена`, 'info');
-        
-        // Имитация работы парсинга
-        simulateParsingTask(task.id);
-        
-        showNotification('Задача парсинга запущена', 'success');
-        
-        // Очищаем форму
-        document.getElementById('parsingForm').reset();
-        toggleSourceOptions();
-    }, 1000);
+        if (data.success) {
+            const task = {
+                id: Date.now(),
+                name: formData.name,
+                source_type: formData.source_type,
+                source_data: JSON.stringify(formData),
+                status: 'running',
+                results_count: 0,
+                created_at: new Date().toISOString()
+            };
+            
+            parsingTasks.unshift(task);
+            displayParsingTasks();
+            addParsingLog(`Задача "${formData.name}" запущена`, 'info');
+            addParsingLog(`Источник: ${formData.channel_link}`, 'info');
+            addParsingLog(`Максимум участников: ${formData.max_members}`, 'info');
+            
+            // Имитация работы парсинга
+            simulateParsingTask(task.id);
+            
+            showNotification('Парсинг запущен', 'success');
+            
+            // Очищаем форму
+            document.getElementById('parsingForm').reset();
+            toggleSourceOptions();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка запуска парсинга:', error);
+        showNotification('Ошибка запуска парсинга', 'error');
+    });
 }
 
 function simulateParsingTask(taskId) {
