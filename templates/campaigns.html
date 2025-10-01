@@ -86,9 +86,14 @@
                         <button type="button" class="btn btn-outline-primary" onclick="previewMessage()">
                             <i class="fas fa-eye"></i> Предварительный просмотр
                         </button>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-paper-plane"></i> Запустить рассылку
-                        </button>
+                        <div>
+                            <button type="button" class="btn btn-warning me-2" onclick="showScheduleModal()">
+                                <i class="fas fa-clock"></i> Запланировать
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Запустить рассылку
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -127,6 +132,27 @@
                             <!-- Данные загружаются через JavaScript -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Запланированные кампании -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">⏰ Запланированные кампании</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadScheduledCampaigns()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="scheduledCampaigns">
+                    <p class="text-muted">Загрузка запланированных кампаний...</p>
                 </div>
             </div>
         </div>
@@ -215,6 +241,57 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно планирования кампании -->
+<div class="modal fade" id="scheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Планирование кампании</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="scheduleForm">
+                    <div class="mb-3">
+                        <label class="form-label">Дата и время:</label>
+                        <input type="datetime-local" class="form-control" id="scheduleTime" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Часовой пояс:</label>
+                        <select class="form-select" id="timezone">
+                            <option value="UTC">UTC</option>
+                            <option value="Europe/Moscow">Москва (UTC+3)</option>
+                            <option value="Europe/Kiev">Киев (UTC+2)</option>
+                            <option value="America/New_York">Нью-Йорк (UTC-5)</option>
+                            <option value="Asia/Tokyo">Токио (UTC+9)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Повторение:</label>
+                        <select class="form-select" id="repeatType" onchange="toggleRepeatOptions()">
+                            <option value="once">Однократно</option>
+                            <option value="daily">Ежедневно</option>
+                            <option value="weekly">Еженедельно</option>
+                            <option value="monthly">Ежемесячно</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="repeatInterval" style="display: none;">
+                        <label class="form-label">Интервал:</label>
+                        <input type="number" class="form-control" id="interval" value="1" min="1">
+                        <div class="form-text">Например: каждые 2 дня, каждые 3 недели</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="scheduleCampaign()">Запланировать</button>
             </div>
         </div>
     </div>
@@ -790,5 +867,200 @@ function updateCampaignLogs() {
     // Обновление логов в реальном времени
     // В реальном приложении здесь был бы WebSocket или периодический запрос
 }
+
+// Функции для планировщика
+function showScheduleModal() {
+    // Проверяем, что форма заполнена
+    const campaignName = document.getElementById('campaignName').value;
+    const message = document.getElementById('message').value;
+    
+    if (!campaignName || !message) {
+        showNotification('Заполните название кампании и сообщение', 'error');
+        return;
+    }
+    
+    new bootstrap.Modal(document.getElementById('scheduleModal')).show();
+}
+
+function scheduleCampaign() {
+    const campaignName = document.getElementById('campaignName').value;
+    const message = document.getElementById('message').value;
+    const targetDatabase = document.getElementById('targetDatabase').value;
+    const recipientCount = document.getElementById('recipientCount').value;
+    const messageDelay = document.getElementById('messageDelay').value;
+    
+    const scheduleData = {
+        campaign_name: campaignName,
+        message: message,
+        target_database: targetDatabase,
+        recipient_count: parseInt(recipientCount),
+        message_delay: parseInt(messageDelay),
+        schedule_time: document.getElementById('scheduleTime').value,
+        timezone: document.getElementById('timezone').value,
+        repeat_type: document.getElementById('repeatType').value,
+        repeat_interval: parseInt(document.getElementById('interval').value) || 1
+    };
+    
+    // Сначала создаем кампанию
+    fetch('/api/start-spam', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(scheduleData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Затем планируем её
+            const scheduleRequest = {
+                campaign_id: data.campaign_id,
+                schedule_time: scheduleData.schedule_time,
+                timezone: scheduleData.timezone,
+                repeat_type: scheduleData.repeat_type,
+                repeat_interval: scheduleData.repeat_interval
+            };
+            
+            return fetch('/api/schedule-campaign', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+        } else {
+            throw new Error(data.error);
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Кампания запланирована успешно', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('scheduleModal')).hide();
+            loadScheduledCampaigns();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка планирования:', error);
+        showNotification('Ошибка планирования кампании', 'error');
+    });
+}
+
+function loadScheduledCampaigns() {
+    fetch('/api/scheduled-campaigns')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displayScheduledCampaigns(data.campaigns);
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка загрузки запланированных кампаний:', error);
+    });
+}
+
+function displayScheduledCampaigns(campaigns) {
+    const container = document.getElementById('scheduledCampaigns');
+    if (!container) return;
+    
+    if (campaigns.length === 0) {
+        container.innerHTML = '<p class="text-muted">Нет запланированных кампаний</p>';
+        return;
+    }
+    
+    let html = '';
+    campaigns.forEach(campaign => {
+        const statusBadge = getStatusBadge(campaign.status);
+        const scheduleTime = new Date(campaign.schedule_time).toLocaleString('ru-RU');
+        
+        html += `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="card-title">${campaign.name}</h6>
+                            <p class="card-text text-muted mb-1">
+                                <i class="fas fa-clock"></i> ${scheduleTime} (${campaign.timezone})
+                            </p>
+                            <p class="card-text text-muted mb-1">
+                                <i class="fas fa-repeat"></i> ${getRepeatTypeText(campaign.repeat_type)}
+                            </p>
+                            <span class="badge ${statusBadge.class}">${statusBadge.text}</span>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="cancelScheduledCampaign(${campaign.id})">
+                                <i class="fas fa-times"></i> Отменить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'scheduled': { class: 'bg-warning', text: 'Запланировано' },
+        'running': { class: 'bg-primary', text: 'Выполняется' },
+        'completed': { class: 'bg-success', text: 'Завершено' },
+        'failed': { class: 'bg-danger', text: 'Ошибка' },
+        'cancelled': { class: 'bg-secondary', text: 'Отменено' }
+    };
+    return badges[status] || { class: 'bg-secondary', text: status };
+}
+
+function getRepeatTypeText(repeatType) {
+    const types = {
+        'once': 'Однократно',
+        'daily': 'Ежедневно',
+        'weekly': 'Еженедельно',
+        'monthly': 'Ежемесячно'
+    };
+    return types[repeatType] || repeatType;
+}
+
+function cancelScheduledCampaign(scheduledId) {
+    if (!confirm('Вы уверены, что хотите отменить эту кампанию?')) {
+        return;
+    }
+    
+    fetch(`/api/cancel-scheduled/${scheduledId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Кампания отменена', 'success');
+            loadScheduledCampaigns();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка отмены кампании:', error);
+        showNotification('Ошибка отмены кампании', 'error');
+    });
+}
+
+function toggleRepeatOptions() {
+    const repeatType = document.getElementById('repeatType').value;
+    const intervalDiv = document.getElementById('repeatInterval');
+    
+    if (repeatType === 'once') {
+        intervalDiv.style.display = 'none';
+    } else {
+        intervalDiv.style.display = 'block';
+    }
+}
+
+// Загружаем запланированные кампании при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadScheduledCampaigns();
+});
 </script>
 {% endblock %}

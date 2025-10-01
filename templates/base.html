@@ -65,6 +65,24 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'auto_reply_page' %}active{% endif %}" href="{{ url_for('auto_reply_page') }}">
+                                <i class="fas fa-robot"></i>
+                                🤖 Автоответчик
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'templates_page' %}active{% endif %}" href="{{ url_for('templates_page') }}">
+                                <i class="fas fa-file-alt"></i>
+                                📝 Шаблоны
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'analytics_page' %}active{% endif %}" href="{{ url_for('analytics_page') }}">
+                                <i class="fas fa-chart-line"></i>
+                                📊 Аналитика
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'blacklist_page' %}active{% endif %}" href="{{ url_for('blacklist_page') }}">
                                 <i class="fas fa-ban"></i>
                                 🚫 Blacklist

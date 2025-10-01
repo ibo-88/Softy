@@ -13,6 +13,9 @@ import threading
 import asyncio
 import time
 import random
+import schedule
+import pytz
+import re
 import logging
 import shutil
 from datetime import datetime
@@ -149,6 +152,99 @@ class DatabaseManager:
                 results_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP
+            )
+        ''')
+        
+        # Таблица для планировщика рассылок
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scheduled_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campaign_id INTEGER,
+                schedule_time TIMESTAMP,
+                timezone TEXT DEFAULT 'UTC',
+                repeat_type TEXT DEFAULT 'once',
+                repeat_interval INTEGER DEFAULT 1,
+                status TEXT DEFAULT 'scheduled',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (campaign_id) REFERENCES campaigns (id)
+            )
+        ''')
+        
+        # Таблица для отслеживания отправок
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS campaign_sends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campaign_id INTEGER,
+                user_id TEXT,
+                sent_at TIMESTAMP,
+                status TEXT,
+                message_id TEXT,
+                FOREIGN KEY (campaign_id) REFERENCES campaigns (id)
+            )
+        ''')
+        
+        # Таблица для автоответчика
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS auto_replies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER,
+                trigger_words TEXT,
+                response_message TEXT,
+                delay_seconds INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (account_id) REFERENCES accounts (id)
+            )
+        ''')
+        
+        # Таблица для отслеживания взаимодействий
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS message_interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campaign_id INTEGER,
+                user_id TEXT,
+                message_id TEXT,
+                interaction_type TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                metadata TEXT,
+                FOREIGN KEY (campaign_id) REFERENCES campaigns (id)
+            )
+        ''')
+        
+        # Таблица для шаблонов сообщений
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS message_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                content TEXT,
+                variables TEXT,
+                category TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица для сегментов аудитории
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS audience_segments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                rules TEXT,
+                user_count INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица для цепочек сообщений
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS message_sequences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                steps TEXT,
+                trigger_conditions TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -1398,6 +1494,465 @@ class SpamManager:
     def get_campaign_stats(self, campaign_id):
         """Получение статистики кампании"""
         return self.active_campaigns.get(campaign_id, {})
+    
+    def run_scheduled_campaign(self, campaign_id):
+        """Запуск запланированной кампании"""
+        try:
+            # Получаем данные кампании
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM campaigns WHERE id = ?', (campaign_id,))
+            campaign_data = cursor.fetchone()
+            conn.close()
+            
+            if not campaign_data:
+                return False
+            
+            # Запускаем кампанию
+            campaign_info = {
+                'campaign_id': campaign_id,
+                'message': campaign_data[2],  # message
+                'target_count': campaign_data[3],  # target_count
+                'usernames_file': None  # Для запланированных кампаний
+            }
+            
+            return self.start_spam_campaign(campaign_info)
+            
+        except Exception as e:
+            logger.error(f"Ошибка запуска запланированной кампании: {e}")
+            return False
+
+class CampaignScheduler:
+    def __init__(self, db_manager, spam_manager):
+        self.db = db_manager
+        self.spam_manager = spam_manager
+        self.scheduler_thread = None
+        self.running = False
+    
+    def start_scheduler(self):
+        """Запуск планировщика в отдельном потоке"""
+        if not self.running:
+            self.running = True
+            self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+            self.scheduler_thread.start()
+            logger.info("Планировщик рассылок запущен")
+    
+    def stop_scheduler(self):
+        """Остановка планировщика"""
+        self.running = False
+        if self.scheduler_thread:
+            self.scheduler_thread.join()
+        logger.info("Планировщик рассылок остановлен")
+    
+    def _scheduler_loop(self):
+        """Основной цикл планировщика"""
+        while self.running:
+            try:
+                self._check_scheduled_campaigns()
+                time.sleep(60)  # Проверяем каждую минуту
+            except Exception as e:
+                logger.error(f"Ошибка в планировщике: {e}")
+                time.sleep(60)
+    
+    def _check_scheduled_campaigns(self):
+        """Проверка запланированных кампаний"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        current_time = datetime.now()
+        
+        cursor.execute('''
+            SELECT id, campaign_id, schedule_time, timezone, repeat_type, repeat_interval
+            FROM scheduled_campaigns 
+            WHERE status = 'scheduled' AND schedule_time <= ?
+        ''', (current_time,))
+        
+        campaigns_to_run = cursor.fetchall()
+        
+        for scheduled_id, campaign_id, schedule_time, timezone, repeat_type, repeat_interval in campaigns_to_run:
+            self._execute_scheduled_campaign(scheduled_id, campaign_id, schedule_time, timezone, repeat_type, repeat_interval)
+        
+        conn.close()
+    
+    def _execute_scheduled_campaign(self, scheduled_id, campaign_id, schedule_time, timezone, repeat_type, repeat_interval):
+        """Выполнение запланированной кампании"""
+        try:
+            # Обновляем статус на "выполняется"
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            cursor.execute('UPDATE scheduled_campaigns SET status = ? WHERE id = ?', ('running', scheduled_id))
+            conn.commit()
+            conn.close()
+            
+            # Запускаем кампанию
+            success = self.spam_manager.run_scheduled_campaign(campaign_id)
+            
+            # Обновляем статус
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            if success:
+                if repeat_type == 'once':
+                    cursor.execute('UPDATE scheduled_campaigns SET status = ? WHERE id = ?', ('completed', scheduled_id))
+                else:
+                    # Планируем следующее выполнение
+                    next_time = self._calculate_next_run(schedule_time, repeat_type, repeat_interval)
+                    cursor.execute('''
+                        UPDATE scheduled_campaigns 
+                        SET schedule_time = ?, status = ? 
+                        WHERE id = ?
+                    ''', (next_time, 'scheduled', scheduled_id))
+            else:
+                cursor.execute('UPDATE scheduled_campaigns SET status = ? WHERE id = ?', ('failed', scheduled_id))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Запланированная кампания {campaign_id} выполнена")
+            
+        except Exception as e:
+            logger.error(f"Ошибка выполнения запланированной кампании {campaign_id}: {e}")
+    
+    def _calculate_next_run(self, last_run, repeat_type, interval):
+        """Расчет времени следующего запуска"""
+        if repeat_type == 'daily':
+            return last_run + timedelta(days=interval)
+        elif repeat_type == 'weekly':
+            return last_run + timedelta(weeks=interval)
+        elif repeat_type == 'monthly':
+            return last_run + timedelta(days=30 * interval)
+        else:
+            return last_run + timedelta(days=1)
+    
+    def schedule_campaign(self, campaign_id, schedule_time, timezone='UTC', repeat_type='once', repeat_interval=1):
+        """Планирование кампании"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO scheduled_campaigns (campaign_id, schedule_time, timezone, repeat_type, repeat_interval)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (campaign_id, schedule_time, timezone, repeat_type, repeat_interval))
+            
+            scheduled_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Кампания {campaign_id} запланирована на {schedule_time}")
+            return scheduled_id
+            
+        except Exception as e:
+            logger.error(f"Ошибка планирования кампании: {e}")
+            return None
+    
+    def cancel_scheduled_campaign(self, scheduled_id):
+        """Отмена запланированной кампании"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            cursor.execute('UPDATE scheduled_campaigns SET status = ? WHERE id = ?', ('cancelled', scheduled_id))
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Запланированная кампания {scheduled_id} отменена")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка отмены кампании: {e}")
+            return False
+    
+    def get_scheduled_campaigns(self):
+        """Получение списка запланированных кампаний"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT sc.id, sc.campaign_id, c.name, sc.schedule_time, sc.timezone, 
+                       sc.repeat_type, sc.status, sc.created_at
+                FROM scheduled_campaigns sc
+                JOIN campaigns c ON sc.campaign_id = c.id
+                ORDER BY sc.schedule_time
+            ''')
+            
+            campaigns = []
+            for row in cursor.fetchall():
+                campaigns.append({
+                    'id': row[0],
+                    'campaign_id': row[1],
+                    'name': row[2],
+                    'schedule_time': row[3],
+                    'timezone': row[4],
+                    'repeat_type': row[5],
+                    'status': row[6],
+                    'created_at': row[7]
+                })
+            
+            conn.close()
+            return campaigns
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения запланированных кампаний: {e}")
+            return []
+
+class AutoReplyManager:
+    def __init__(self, db_manager):
+        self.db = db_manager
+        self.active_replies = {}
+    
+    def set_auto_reply(self, account_id, trigger_words, response_message, delay_seconds=0):
+        """Настройка автоответа"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO auto_replies (account_id, trigger_words, response_message, delay_seconds)
+                VALUES (?, ?, ?, ?)
+            ''', (account_id, json.dumps(trigger_words), response_message, delay_seconds))
+            
+            reply_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            
+            # Обновляем кэш активных автоответов
+            self._load_active_replies()
+            
+            logger.info(f"Автоответ настроен для аккаунта {account_id}")
+            return reply_id
+            
+        except Exception as e:
+            logger.error(f"Ошибка настройки автоответа: {e}")
+            return None
+    
+    def _load_active_replies(self):
+        """Загрузка активных автоответов"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT account_id, trigger_words, response_message, delay_seconds
+                FROM auto_replies 
+                WHERE is_active = 1
+            ''')
+            
+            self.active_replies = {}
+            for row in cursor.fetchall():
+                account_id, trigger_words, response_message, delay_seconds = row
+                self.active_replies[account_id] = {
+                    'trigger_words': json.loads(trigger_words),
+                    'response_message': response_message,
+                    'delay_seconds': delay_seconds
+                }
+            
+            conn.close()
+            
+        except Exception as e:
+            logger.error(f"Ошибка загрузки автоответов: {e}")
+    
+    def process_incoming_message(self, account_id, message_text, sender_id):
+        """Обработка входящего сообщения"""
+        try:
+            if account_id not in self.active_replies:
+                return False
+            
+            reply_config = self.active_replies[account_id]
+            trigger_words = reply_config['trigger_words']
+            
+            # Проверяем наличие ключевых слов
+            message_lower = message_text.lower()
+            for word in trigger_words:
+                if word.lower() in message_lower:
+                    # Находим подходящий автоответ
+                    response_message = reply_config['response_message']
+                    delay_seconds = reply_config['delay_seconds']
+                    
+                    # Запускаем отправку ответа с задержкой
+                    if delay_seconds > 0:
+                        threading.Timer(delay_seconds, self._send_auto_reply, 
+                                      args=(account_id, response_message, sender_id)).start()
+                    else:
+                        self._send_auto_reply(account_id, response_message, sender_id)
+                    
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Ошибка обработки входящего сообщения: {e}")
+            return False
+    
+    def _send_auto_reply(self, account_id, message, recipient_id):
+        """Отправка автоответа"""
+        try:
+            # Здесь должна быть логика отправки сообщения
+            # Для демонстрации просто логируем
+            logger.info(f"Автоответ от аккаунта {account_id} пользователю {recipient_id}: {message}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка отправки автоответа: {e}")
+            return False
+
+class AdvancedAnalytics:
+    def __init__(self, db_manager):
+        self.db = db_manager
+    
+    def track_message_interaction(self, campaign_id, user_id, message_id, interaction_type, metadata=None):
+        """Отслеживание взаимодействий с сообщениями"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO message_interactions (campaign_id, user_id, message_id, interaction_type, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (campaign_id, user_id, message_id, interaction_type, json.dumps(metadata) if metadata else None))
+            
+            conn.commit()
+            conn.close()
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка отслеживания взаимодействия: {e}")
+            return False
+    
+    def generate_campaign_analytics(self, campaign_id):
+        """Генерация аналитики по кампании"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            # Общая статистика
+            cursor.execute('SELECT COUNT(*) FROM campaign_sends WHERE campaign_id = ?', (campaign_id,))
+            total_sent = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM campaign_sends WHERE campaign_id = ? AND status = "sent"', (campaign_id,))
+            successful_sends = cursor.fetchone()[0]
+            
+            # Статистика взаимодействий
+            cursor.execute('''
+                SELECT interaction_type, COUNT(*) 
+                FROM message_interactions 
+                WHERE campaign_id = ? 
+                GROUP BY interaction_type
+            ''', (campaign_id,))
+            interactions = dict(cursor.fetchall())
+            
+            # Временная статистика
+            cursor.execute('''
+                SELECT DATE(sent_at) as date, COUNT(*) as count
+                FROM campaign_sends 
+                WHERE campaign_id = ? 
+                GROUP BY DATE(sent_at)
+                ORDER BY date
+            ''', (campaign_id,))
+            daily_stats = cursor.fetchall()
+            
+            conn.close()
+            
+            analytics = {
+                'campaign_id': campaign_id,
+                'total_sent': total_sent,
+                'successful_sends': successful_sends,
+                'success_rate': (successful_sends / total_sent * 100) if total_sent > 0 else 0,
+                'interactions': interactions,
+                'daily_stats': daily_stats,
+                'generated_at': datetime.now().isoformat()
+            }
+            
+            return analytics
+            
+        except Exception as e:
+            logger.error(f"Ошибка генерации аналитики: {e}")
+            return None
+
+class MessageTemplateManager:
+    def __init__(self, db_manager):
+        self.db = db_manager
+    
+    def create_template(self, name, content, variables=None, category='general'):
+        """Создание шаблона сообщения"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO message_templates (name, content, variables, category)
+                VALUES (?, ?, ?, ?)
+            ''', (name, content, json.dumps(variables) if variables else None, category))
+            
+            template_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Шаблон '{name}' создан")
+            return template_id
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания шаблона: {e}")
+            return None
+    
+    def render_template(self, template_id, user_data):
+        """Рендеринг шаблона с данными пользователя"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT content, variables FROM message_templates WHERE id = ?', (template_id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                return None
+            
+            content, variables_json = result
+            variables = json.loads(variables_json) if variables_json else []
+            
+            # Подставляем переменные
+            rendered_content = content
+            for variable in variables:
+                placeholder = f"{{{{{variable}}}}}"
+                value = user_data.get(variable, f"[{variable}]")
+                rendered_content = rendered_content.replace(placeholder, str(value))
+            
+            conn.close()
+            return rendered_content
+            
+        except Exception as e:
+            logger.error(f"Ошибка рендеринга шаблона: {e}")
+            return None
+    
+    def get_templates(self, category=None):
+        """Получение списка шаблонов"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            if category:
+                cursor.execute('SELECT * FROM message_templates WHERE category = ? AND is_active = 1', (category,))
+            else:
+                cursor.execute('SELECT * FROM message_templates WHERE is_active = 1')
+            
+            templates = []
+            for row in cursor.fetchall():
+                templates.append({
+                    'id': row[0],
+                    'name': row[1],
+                    'content': row[2],
+                    'variables': json.loads(row[3]) if row[3] else [],
+                    'category': row[4],
+                    'created_at': row[6]
+                })
+            
+            conn.close()
+            return templates
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения шаблонов: {e}")
+            return []
 
 # Инициализация менеджеров
 db_manager = DatabaseManager()
@@ -1411,6 +1966,12 @@ subscription_manager = SubscriptionManager(db_manager, account_manager)
 session_cloning_manager = SessionCloningManager(db_manager)
 parsing_manager = ParsingManager(db_manager)
 report_generator = ReportGenerator(db_manager)
+
+# Новые продвинутые менеджеры
+campaign_scheduler = CampaignScheduler(db_manager, spam_manager)
+auto_reply_manager = AutoReplyManager(db_manager)
+advanced_analytics = AdvancedAnalytics(db_manager)
+message_template_manager = MessageTemplateManager(db_manager)
 
 # Импорт конфигурации
 from config import config
@@ -1491,6 +2052,21 @@ def invitations_page():
 def subscriptions_page():
     """Страница массовых подписок"""
     return render_template('subscriptions.html')
+
+@app.route('/auto-reply')
+def auto_reply_page():
+    """Страница автоответчика"""
+    return render_template('auto_reply.html')
+
+@app.route('/templates')
+def templates_page():
+    """Страница шаблонов сообщений"""
+    return render_template('templates.html')
+
+@app.route('/analytics')
+def analytics_page():
+    """Страница расширенной аналитики"""
+    return render_template('analytics.html')
 
 @app.route('/settings')
 def settings_page():
@@ -1595,6 +2171,162 @@ def mass_check():
         return jsonify({'success': True, 'count': count, 'message': f'Запущена проверка {count} аккаунтов'})
     except Exception as e:
         logger.error(f"Ошибка массовой проверки: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# API endpoints для планировщика рассылок
+@app.route('/api/schedule-campaign', methods=['POST'])
+def schedule_campaign():
+    """Планирование кампании"""
+    try:
+        data = request.json
+        campaign_id = data.get('campaign_id')
+        schedule_time = data.get('schedule_time')
+        timezone = data.get('timezone', 'UTC')
+        repeat_type = data.get('repeat_type', 'once')
+        repeat_interval = data.get('repeat_interval', 1)
+        
+        if not campaign_id or not schedule_time:
+            return jsonify({'error': 'Не указаны обязательные параметры'}), 400
+        
+        scheduled_id = campaign_scheduler.schedule_campaign(
+            campaign_id, schedule_time, timezone, repeat_type, repeat_interval
+        )
+        
+        if scheduled_id:
+            return jsonify({'success': True, 'scheduled_id': scheduled_id})
+        else:
+            return jsonify({'error': 'Ошибка планирования кампании'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка планирования кампании: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/scheduled-campaigns', methods=['GET'])
+def get_scheduled_campaigns():
+    """Получение запланированных кампаний"""
+    try:
+        campaigns = campaign_scheduler.get_scheduled_campaigns()
+        return jsonify({'success': True, 'campaigns': campaigns})
+    except Exception as e:
+        logger.error(f"Ошибка получения запланированных кампаний: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cancel-scheduled/<int:scheduled_id>', methods=['POST'])
+def cancel_scheduled_campaign(scheduled_id):
+    """Отмена запланированной кампании"""
+    try:
+        success = campaign_scheduler.cancel_scheduled_campaign(scheduled_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Кампания отменена'})
+        else:
+            return jsonify({'error': 'Ошибка отмены кампании'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка отмены кампании: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# API endpoints для автоответчика
+@app.route('/api/set-auto-reply', methods=['POST'])
+def set_auto_reply():
+    """Настройка автоответа"""
+    try:
+        data = request.json
+        account_id = data.get('account_id')
+        trigger_words = data.get('trigger_words', [])
+        response_message = data.get('response_message')
+        delay_seconds = data.get('delay_seconds', 0)
+        
+        if not account_id or not response_message:
+            return jsonify({'error': 'Не указаны обязательные параметры'}), 400
+        
+        reply_id = auto_reply_manager.set_auto_reply(
+            account_id, trigger_words, response_message, delay_seconds
+        )
+        
+        if reply_id:
+            return jsonify({'success': True, 'reply_id': reply_id})
+        else:
+            return jsonify({'error': 'Ошибка настройки автоответа'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка настройки автоответа: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# API endpoints для аналитики
+@app.route('/api/campaign-analytics/<int:campaign_id>', methods=['GET'])
+def get_campaign_analytics(campaign_id):
+    """Получение аналитики кампании"""
+    try:
+        analytics = advanced_analytics.generate_campaign_analytics(campaign_id)
+        
+        if analytics:
+            return jsonify({'success': True, 'analytics': analytics})
+        else:
+            return jsonify({'error': 'Ошибка генерации аналитики'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка получения аналитики: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# API endpoints для шаблонов сообщений
+@app.route('/api/create-template', methods=['POST'])
+def create_template():
+    """Создание шаблона сообщения"""
+    try:
+        data = request.json
+        name = data.get('name')
+        content = data.get('content')
+        variables = data.get('variables', [])
+        category = data.get('category', 'general')
+        
+        if not name or not content:
+            return jsonify({'error': 'Не указаны обязательные параметры'}), 400
+        
+        template_id = message_template_manager.create_template(
+            name, content, variables, category
+        )
+        
+        if template_id:
+            return jsonify({'success': True, 'template_id': template_id})
+        else:
+            return jsonify({'error': 'Ошибка создания шаблона'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка создания шаблона: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/templates', methods=['GET'])
+def get_templates():
+    """Получение списка шаблонов"""
+    try:
+        category = request.args.get('category')
+        templates = message_template_manager.get_templates(category)
+        return jsonify({'success': True, 'templates': templates})
+    except Exception as e:
+        logger.error(f"Ошибка получения шаблонов: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/render-template', methods=['POST'])
+def render_template():
+    """Рендеринг шаблона с данными пользователя"""
+    try:
+        data = request.json
+        template_id = data.get('template_id')
+        user_data = data.get('user_data', {})
+        
+        if not template_id:
+            return jsonify({'error': 'Не указан ID шаблона'}), 400
+        
+        rendered_content = message_template_manager.render_template(template_id, user_data)
+        
+        if rendered_content:
+            return jsonify({'success': True, 'content': rendered_content})
+        else:
+            return jsonify({'error': 'Ошибка рендеринга шаблона'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка рендеринга шаблона: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/stats', methods=['GET'])
@@ -1921,6 +2653,9 @@ def analyze_audience(task_id):
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # Запуск планировщика рассылок
+    campaign_scheduler.start_scheduler()
+    
     logger.info("Запуск Telegram Mass Account Management Platform")
     logger.info(f"Платформа доступна по адресу: http://{app_config.HOST}:{app_config.PORT}")
     app.run(host=app_config.HOST, port=app_config.PORT, debug=app_config.DEBUG)
