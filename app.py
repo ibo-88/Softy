@@ -16,12 +16,14 @@ import random
 import schedule
 import pytz
 import re
+import langdetect
+from langdetect import detect
 import logging
 import shutil
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from telethon import TelegramClient
-from telethon.errors import FloodWaitError, UserBannedError, ChatWriteForbiddenError
+from telethon.errors import FloodWaitError, UserBannedError, ChatWriteForbiddenError, ChatAdminRequiredError
 from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest
 from telethon.tl.functions.channels import JoinChannelRequest
@@ -248,6 +250,50 @@ class DatabaseManager:
             )
         ''')
         
+        # Таблица для найденных каналов/чатов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS found_channels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT UNIQUE,
+                username TEXT,
+                title TEXT,
+                description TEXT,
+                type TEXT, -- channel, group, supergroup
+                language TEXT,
+                members_count INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT 1,
+                join_status TEXT DEFAULT 'not_joined', -- not_joined, joined, banned, error
+                found_by_keyword TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица для задач вступления в каналы
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS join_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT,
+                account_id INTEGER,
+                status TEXT DEFAULT 'pending', -- pending, joined, failed, banned
+                error_message TEXT,
+                joined_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (account_id) REFERENCES accounts (id)
+            )
+        ''')
+        
+        # Таблица для языков
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS channel_languages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT,
+                language TEXT,
+                confidence REAL, -- уверенность в определении языка
+                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (channel_id) REFERENCES found_channels (channel_id)
+            )
+        ''')
+        
         # Таблица рассылок
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS campaigns (
@@ -353,6 +399,63 @@ class ProxyManager:
         except Exception as e:
             logger.error(f"Ошибка получения прокси из API: {e}")
             return 0
+    
+    def get_random_proxy_for_account(self, account_id):
+        """Получение случайного прокси для аккаунта (любое гео)"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            # Получаем случайный активный прокси (любое гео)
+            cursor.execute('''
+                SELECT id, ip, port, username, password, country, city
+                FROM proxies 
+                WHERE is_active = 1 
+                ORDER BY RANDOM() 
+                LIMIT 1
+            ''')
+            
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                proxy_id, ip, port, username, password, country, city = result
+                
+                # Привязываем прокси к аккаунту
+                self.assign_proxy_to_account(account_id, proxy_id)
+                
+                return {
+                    'id': proxy_id,
+                    'ip': ip,
+                    'port': port,
+                    'username': username,
+                    'password': password,
+                    'country': country,
+                    'city': city
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения случайного прокси: {e}")
+            return None
+    
+    def assign_proxy_to_account(self, account_id, proxy_id):
+        """Привязка прокси к аккаунту (безразлично к гео)"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('UPDATE accounts SET proxy_id = ? WHERE id = ?', (proxy_id, account_id))
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Прокси {proxy_id} привязан к аккаунту {account_id} (гео не учитывается)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка привязки прокси: {e}")
+            return False
 
 class AccountManager:
     def __init__(self, db_manager, proxy_manager):
@@ -1954,6 +2057,426 @@ class MessageTemplateManager:
             logger.error(f"Ошибка получения шаблонов: {e}")
             return []
 
+class ChannelDiscoveryManager:
+    def __init__(self, db_manager, account_manager):
+        self.db = db_manager
+        self.account_manager = account_manager
+    
+    def search_channels_by_keywords(self, keywords, channel_type='all', max_results=100):
+        """Поиск каналов/чатов по ключевым словам"""
+        try:
+            # Получаем активный аккаунт для поиска
+            active_account = self.get_active_account()
+            if not active_account:
+                logger.error("Нет активных аккаунтов для поиска")
+                return False
+            
+            client = TelegramClient(active_account['session_file'], active_account['api_id'], active_account['api_hash'])
+            
+            # Настраиваем прокси если есть
+            if active_account['proxy']:
+                proxy = {
+                    'proxy_type': 'http',
+                    'addr': active_account['proxy']['ip'],
+                    'port': active_account['proxy']['port'],
+                    'username': active_account['proxy']['username'],
+                    'password': active_account['proxy']['password']
+                }
+                client.set_proxy(proxy)
+            
+            found_channels = []
+            
+            with client:
+                for keyword in keywords:
+                    try:
+                        # Поиск по ключевому слову
+                        results = client.get_dialogs(limit=max_results)
+                        
+                        for dialog in results:
+                            entity = dialog.entity
+                            
+                            # Проверяем тип канала/чата
+                            if channel_type == 'channels' and not hasattr(entity, 'broadcast'):
+                                continue
+                            elif channel_type == 'groups' and not hasattr(entity, 'megagroup'):
+                                continue
+                            elif channel_type == 'all':
+                                pass  # Берем все
+                            
+                            # Проверяем название и описание на наличие ключевого слова
+                            title = getattr(entity, 'title', '')
+                            username = getattr(entity, 'username', '')
+                            
+                            if keyword.lower() in title.lower() or keyword.lower() in username.lower():
+                                # Определяем язык
+                                language = self.detect_language(title)
+                                
+                                # Получаем количество участников
+                                members_count = getattr(entity, 'participants_count', 0)
+                                
+                                channel_data = {
+                                    'channel_id': str(entity.id),
+                                    'username': username,
+                                    'title': title,
+                                    'description': getattr(entity, 'about', ''),
+                                    'type': 'channel' if hasattr(entity, 'broadcast') else 'group',
+                                    'language': language,
+                                    'members_count': members_count,
+                                    'found_by_keyword': keyword
+                                }
+                                
+                                found_channels.append(channel_data)
+                                
+                    except Exception as e:
+                        logger.error(f"Ошибка поиска по ключевому слову '{keyword}': {e}")
+                        continue
+            
+            # Сохраняем найденные каналы в базу данных
+            self.save_found_channels(found_channels)
+            
+            logger.info(f"Найдено {len(found_channels)} каналов/чатов по ключевым словам")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка поиска каналов: {e}")
+            return False
+    
+    def detect_language(self, text):
+        """Определение языка текста"""
+        try:
+            if not text or len(text.strip()) < 3:
+                return 'unknown'
+            
+            # Определяем язык
+            language = detect(text)
+            
+            # Маппинг кодов языков на названия
+            language_map = {
+                'ru': 'russian',
+                'en': 'english',
+                'es': 'spanish',
+                'fr': 'french',
+                'de': 'german',
+                'it': 'italian',
+                'pt': 'portuguese',
+                'zh': 'chinese',
+                'ja': 'japanese',
+                'ko': 'korean',
+                'ar': 'arabic',
+                'hi': 'hindi',
+                'tr': 'turkish',
+                'pl': 'polish',
+                'uk': 'ukrainian',
+                'bg': 'bulgarian',
+                'cs': 'czech',
+                'sk': 'slovak',
+                'hr': 'croatian',
+                'sr': 'serbian',
+                'sl': 'slovenian',
+                'et': 'estonian',
+                'lv': 'latvian',
+                'lt': 'lithuanian',
+                'fi': 'finnish',
+                'sv': 'swedish',
+                'no': 'norwegian',
+                'da': 'danish',
+                'nl': 'dutch',
+                'be': 'belarusian',
+                'kk': 'kazakh',
+                'uz': 'uzbek',
+                'ky': 'kyrgyz',
+                'tg': 'tajik',
+                'mn': 'mongolian',
+                'vi': 'vietnamese',
+                'th': 'thai',
+                'id': 'indonesian',
+                'ms': 'malay',
+                'tl': 'filipino'
+            }
+            
+            return language_map.get(language, language)
+            
+        except Exception as e:
+            logger.error(f"Ошибка определения языка: {e}")
+            return 'unknown'
+    
+    def save_found_channels(self, channels):
+        """Сохранение найденных каналов в базу данных"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            for channel in channels:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO found_channels 
+                    (channel_id, username, title, description, type, language, members_count, found_by_keyword)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    channel['channel_id'],
+                    channel['username'],
+                    channel['title'],
+                    channel['description'],
+                    channel['type'],
+                    channel['language'],
+                    channel['members_count'],
+                    channel['found_by_keyword']
+                ))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Сохранено {len(channels)} каналов в базу данных")
+            
+        except Exception as e:
+            logger.error(f"Ошибка сохранения каналов: {e}")
+    
+    def get_active_account(self):
+        """Получение активного аккаунта для поиска"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT a.id, a.session_file, a.api_id, a.api_hash, 
+                       p.ip, p.port, p.username, p.password
+                FROM accounts a
+                LEFT JOIN proxies p ON a.proxy_id = p.id
+                WHERE a.status = 'online' AND a.api_id IS NOT NULL
+                ORDER BY RANDOM()
+                LIMIT 1
+            ''')
+            
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                account_id, session_file, api_id, api_hash, ip, port, username, password = result
+                proxy = None
+                if ip:
+                    proxy = {'ip': ip, 'port': port, 'username': username, 'password': password}
+                
+                return {
+                    'id': account_id,
+                    'session_file': session_file,
+                    'api_id': api_id,
+                    'api_hash': api_hash,
+                    'proxy': proxy
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения активного аккаунта: {e}")
+            return None
+    
+    def join_channels(self, channel_ids, account_ids=None):
+        """Автоматическое вступление в каналы/чаты"""
+        try:
+            if not account_ids:
+                # Получаем все активные аккаунты
+                account_ids = self.get_active_account_ids()
+            
+            if not account_ids:
+                logger.error("Нет активных аккаунтов для вступления")
+                return False
+            
+            # Создаем задачи вступления
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            for channel_id in channel_ids:
+                for account_id in account_ids:
+                    cursor.execute('''
+                        INSERT INTO join_tasks (channel_id, account_id, status)
+                        VALUES (?, ?, 'pending')
+                    ''', (channel_id, account_id))
+            
+            conn.commit()
+            conn.close()
+            
+            # Запускаем вступление в отдельных потоках
+            for channel_id in channel_ids:
+                for account_id in account_ids:
+                    thread = threading.Thread(
+                        target=self._join_channel_worker,
+                        args=(channel_id, account_id),
+                        daemon=True
+                    )
+                    thread.start()
+            
+            logger.info(f"Запущено вступление в {len(channel_ids)} каналов для {len(account_ids)} аккаунтов")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка вступления в каналы: {e}")
+            return False
+    
+    def _join_channel_worker(self, channel_id, account_id):
+        """Воркер для вступления в канал"""
+        try:
+            # Получаем данные аккаунта
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT a.session_file, a.api_id, a.api_hash,
+                       p.ip, p.port, p.username, p.password
+                FROM accounts a
+                LEFT JOIN proxies p ON a.proxy_id = p.id
+                WHERE a.id = ?
+            ''', (account_id,))
+            
+            result = cursor.fetchone()
+            if not result:
+                conn.close()
+                return
+            
+            session_file, api_id, api_hash, ip, port, username, password = result
+            conn.close()
+            
+            # Создаем клиент
+            client = TelegramClient(session_file, api_id, api_hash)
+            
+            # Настраиваем прокси если есть
+            if ip:
+                proxy = {
+                    'proxy_type': 'http',
+                    'addr': ip,
+                    'port': port,
+                    'username': username,
+                    'password': password
+                }
+                client.set_proxy(proxy)
+            
+            with client:
+                try:
+                    # Получаем информацию о канале
+                    entity = client.get_entity(int(channel_id))
+                    
+                    # Пытаемся вступить
+                    client(JoinChannelRequest(entity))
+                    
+                    # Обновляем статус на успех
+                    self._update_join_status(channel_id, account_id, 'joined')
+                    
+                    logger.info(f"Аккаунт {account_id} успешно вступил в канал {channel_id}")
+                    
+                except FloodWaitError as e:
+                    logger.warning(f"FloodWait для аккаунта {account_id}: {e.seconds} сек")
+                    self._update_join_status(channel_id, account_id, 'failed', f"FloodWait: {e.seconds} сек")
+                    
+                except ChatAdminRequiredError:
+                    logger.warning(f"Нет прав для вступления в канал {channel_id}")
+                    self._update_join_status(channel_id, account_id, 'failed', "Нет прав для вступления")
+                    
+                except UserBannedError:
+                    logger.warning(f"Аккаунт {account_id} забанен в канале {channel_id}")
+                    self._update_join_status(channel_id, account_id, 'banned', "Аккаунт забанен")
+                    # Добавляем в blacklist
+                    self._add_to_blacklist(channel_id, 'USER_BANNED')
+                    
+                except Exception as e:
+                    logger.error(f"Ошибка вступления аккаунта {account_id} в канал {channel_id}: {e}")
+                    self._update_join_status(channel_id, account_id, 'failed', str(e))
+                    
+        except Exception as e:
+            logger.error(f"Ошибка воркера вступления: {e}")
+    
+    def _update_join_status(self, channel_id, account_id, status, error_message=None):
+        """Обновление статуса вступления"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                UPDATE join_tasks 
+                SET status = ?, error_message = ?, joined_at = CURRENT_TIMESTAMP
+                WHERE channel_id = ? AND account_id = ?
+            ''', (status, error_message, channel_id, account_id))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            logger.error(f"Ошибка обновления статуса вступления: {e}")
+    
+    def _add_to_blacklist(self, channel_id, reason):
+        """Добавление в blacklist"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT OR IGNORE INTO blacklist (username, reason, added_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (channel_id, reason))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            logger.error(f"Ошибка добавления в blacklist: {e}")
+    
+    def get_active_account_ids(self):
+        """Получение ID активных аккаунтов"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT id FROM accounts WHERE status = "online"')
+            account_ids = [row[0] for row in cursor.fetchall()]
+            
+            conn.close()
+            return account_ids
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения активных аккаунтов: {e}")
+            return []
+    
+    def get_found_channels(self, language=None, channel_type=None):
+        """Получение найденных каналов с фильтрацией"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            
+            query = 'SELECT * FROM found_channels WHERE is_active = 1'
+            params = []
+            
+            if language:
+                query += ' AND language = ?'
+                params.append(language)
+            
+            if channel_type:
+                query += ' AND type = ?'
+                params.append(channel_type)
+            
+            query += ' ORDER BY members_count DESC'
+            
+            cursor.execute(query, params)
+            
+            channels = []
+            for row in cursor.fetchall():
+                channels.append({
+                    'id': row[0],
+                    'channel_id': row[1],
+                    'username': row[2],
+                    'title': row[3],
+                    'description': row[4],
+                    'type': row[5],
+                    'language': row[6],
+                    'members_count': row[7],
+                    'join_status': row[9],
+                    'found_by_keyword': row[10],
+                    'created_at': row[11]
+                })
+            
+            conn.close()
+            return channels
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения найденных каналов: {e}")
+            return []
+
 # Инициализация менеджеров
 db_manager = DatabaseManager()
 proxy_manager = ProxyManager(db_manager)
@@ -1972,6 +2495,7 @@ campaign_scheduler = CampaignScheduler(db_manager, spam_manager)
 auto_reply_manager = AutoReplyManager(db_manager)
 advanced_analytics = AdvancedAnalytics(db_manager)
 message_template_manager = MessageTemplateManager(db_manager)
+channel_discovery_manager = ChannelDiscoveryManager(db_manager, account_manager)
 
 # Импорт конфигурации
 from config import config
@@ -2067,6 +2591,11 @@ def templates_page():
 def analytics_page():
     """Страница расширенной аналитики"""
     return render_template('analytics.html')
+
+@app.route('/channel-discovery')
+def channel_discovery():
+    """Страница поиска каналов"""
+    return render_template('channel_discovery.html')
 
 @app.route('/settings')
 def settings_page():
@@ -2327,6 +2856,68 @@ def render_template():
             
     except Exception as e:
         logger.error(f"Ошибка рендеринга шаблона: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# API endpoints для поиска каналов
+@app.route('/api/search-channels', methods=['POST'])
+def search_channels():
+    """Поиск каналов/чатов по ключевым словам"""
+    try:
+        data = request.json
+        keywords = data.get('keywords', [])
+        channel_type = data.get('channel_type', 'all')  # all, channels, groups
+        max_results = data.get('max_results', 100)
+        
+        if not keywords:
+            return jsonify({'error': 'Не указаны ключевые слова'}), 400
+        
+        success = channel_discovery_manager.search_channels_by_keywords(
+            keywords, channel_type, max_results
+        )
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Поиск каналов запущен'})
+        else:
+            return jsonify({'error': 'Ошибка поиска каналов'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка поиска каналов: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/found-channels', methods=['GET'])
+def get_found_channels():
+    """Получение найденных каналов"""
+    try:
+        language = request.args.get('language')
+        channel_type = request.args.get('channel_type')
+        
+        channels = channel_discovery_manager.get_found_channels(language, channel_type)
+        return jsonify({'success': True, 'channels': channels})
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения найденных каналов: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/join-channels', methods=['POST'])
+def join_channels():
+    """Автоматическое вступление в каналы"""
+    try:
+        data = request.json
+        channel_ids = data.get('channel_ids', [])
+        account_ids = data.get('account_ids', [])
+        
+        if not channel_ids:
+            return jsonify({'error': 'Не указаны ID каналов'}), 400
+        
+        success = channel_discovery_manager.join_channels(channel_ids, account_ids)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Вступление в каналы запущено'})
+        else:
+            return jsonify({'error': 'Ошибка вступления в каналы'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка вступления в каналы: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/stats', methods=['GET'])

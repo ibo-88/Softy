@@ -3,3 +3,4 @@ telethon==1.30.3
 requests==2.31.0
 schedule==1.2.0
 pytz==2023.3
+langdetect==1.0.9

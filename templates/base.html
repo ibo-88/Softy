@@ -83,6 +83,12 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'channel_discovery' %}active{% endif %}" href="{{ url_for('channel_discovery') }}">
+                                <i class="fas fa-search"></i>
+                                🔍 Поиск каналов
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'blacklist_page' %}active{% endif %}" href="{{ url_for('blacklist_page') }}">
                                 <i class="fas fa-ban"></i>
                                 🚫 Blacklist

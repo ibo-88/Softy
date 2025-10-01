@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+
+{% block title %}Поиск каналов{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🔍 Поиск каналов и чатов</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Форма поиска -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="keywords">Ключевые слова (через запятую):</label>
+                                <textarea class="form-control" id="keywords" rows="3" 
+                                    placeholder="дейтинг, знакомства, гемблинг, ставки, заработок"></textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="channelType">Тип каналов:</label>
+                                <select class="form-control" id="channelType">
+                                    <option value="all">Все подряд</option>
+                                    <option value="channels">Только каналы</option>
+                                    <option value="groups">Только чаты</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="maxResults">Максимум результатов:</label>
+                                <input type="number" class="form-control" id="maxResults" value="100" min="10" max="1000">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <button class="btn btn-primary" onclick="searchChannels()">
+                                <i class="fas fa-search"></i> Начать поиск
+                            </button>
+                            <button class="btn btn-success" onclick="loadFoundChannels()">
+                                <i class="fas fa-refresh"></i> Обновить список
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Фильтры -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="filterLanguage">Фильтр по языку:</label>
+                                <select class="form-control" id="filterLanguage" onchange="filterChannels()">
+                                    <option value="">Все языки</option>
+                                    <option value="russian">Русский</option>
+                                    <option value="english">Английский</option>
+                                    <option value="spanish">Испанский</option>
+                                    <option value="french">Французский</option>
+                                    <option value="german">Немецкий</option>
+                                    <option value="chinese">Китайский</option>
+                                    <option value="arabic">Арабский</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="filterType">Фильтр по типу:</label>
+                                <select class="form-control" id="filterType" onchange="filterChannels()">
+                                    <option value="">Все типы</option>
+                                    <option value="channel">Каналы</option>
+                                    <option value="group">Чаты</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="minMembers">Мин. участников:</label>
+                                <input type="number" class="form-control" id="minMembers" value="0" min="0" onchange="filterChannels()">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Статистика -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <strong>Статистика:</strong>
+                                <span id="channelsStats">Загрузите каналы для просмотра статистики</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Список найденных каналов -->
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="channelsTable">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                                    </th>
+                                    <th>Название</th>
+                                    <th>Username</th>
+                                    <th>Тип</th>
+                                    <th>Язык</th>
+                                    <th>Участники</th>
+                                    <th>Ключевое слово</th>
+                                    <th>Статус вступления</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="channelsTableBody">
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">
+                                        Начните поиск каналов для отображения результатов
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Массовые действия -->
+                    <div class="row mt-3" id="massActions" style="display: none;">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Массовые действия</h5>
+                                </div>
+                                <div class="card-body">
+                                    <button class="btn btn-success" onclick="joinSelectedChannels()">
+                                        <i class="fas fa-sign-in-alt"></i> Вступить в выбранные
+                                    </button>
+                                    <button class="btn btn-warning" onclick="exportSelectedChannels()">
+                                        <i class="fas fa-download"></i> Экспорт выбранных
+                                    </button>
+                                    <button class="btn btn-danger" onclick="addSelectedToBlacklist()">
+                                        <i class="fas fa-ban"></i> В blacklist
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для детальной информации -->
+<div class="modal fade" id="channelDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Информация о канале</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="channelDetailsContent">
+                <!-- Содержимое будет загружено динамически -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" onclick="joinChannelFromModal()">Вступить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allChannels = [];
+let filteredChannels = [];
+
+function searchChannels() {
+    const keywords = document.getElementById('keywords').value.trim();
+    const channelType = document.getElementById('channelType').value;
+    const maxResults = document.getElementById('maxResults').value;
+    
+    if (!keywords) {
+        alert('Введите ключевые слова для поиска');
+        return;
+    }
+    
+    const keywordsList = keywords.split(',').map(k => k.trim()).filter(k => k);
+    
+    if (keywordsList.length === 0) {
+        alert('Введите хотя бы одно ключевое слово');
+        return;
+    }
+    
+    // Показываем индикатор загрузки
+    showLoading();
+    
+    fetch('/api/search-channels', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            keywords: keywordsList,
+            channel_type: channelType,
+            max_results: parseInt(maxResults)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            alert('Поиск каналов запущен! Обновите список через несколько секунд.');
+            setTimeout(loadFoundChannels, 3000);
+        } else {
+            alert('Ошибка: ' + data.error);
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Ошибка:', error);
+        alert('Ошибка при поиске каналов');
+    });
+}
+
+function loadFoundChannels() {
+    showLoading();
+    
+    fetch('/api/found-channels')
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            allChannels = data.channels;
+            filteredChannels = [...allChannels];
+            displayChannels();
+            updateStats();
+        } else {
+            alert('Ошибка загрузки каналов: ' + data.error);
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Ошибка:', error);
+        alert('Ошибка при загрузке каналов');
+    });
+}
+
+function filterChannels() {
+    const language = document.getElementById('filterLanguage').value;
+    const type = document.getElementById('filterType').value;
+    const minMembers = parseInt(document.getElementById('minMembers').value) || 0;
+    
+    filteredChannels = allChannels.filter(channel => {
+        if (language && channel.language !== language) return false;
+        if (type && channel.type !== type) return false;
+        if (channel.members_count < minMembers) return false;
+        return true;
+    });
+    
+    displayChannels();
+    updateStats();
+}
+
+function displayChannels() {
+    const tbody = document.getElementById('channelsTableBody');
+    
+    if (filteredChannels.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Каналы не найдены</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = filteredChannels.map(channel => `
+        <tr>
+            <td>
+                <input type="checkbox" class="channel-checkbox" value="${channel.channel_id}">
+            </td>
+            <td>
+                <strong>${channel.title || 'Без названия'}</strong>
+                ${channel.description ? `<br><small class="text-muted">${channel.description.substring(0, 100)}...</small>` : ''}
+            </td>
+            <td>
+                ${channel.username ? `@${channel.username}` : 'Нет username'}
+            </td>
+            <td>
+                <span class="badge badge-${channel.type === 'channel' ? 'primary' : 'info'}">
+                    ${channel.type === 'channel' ? 'Канал' : 'Чат'}
+                </span>
+            </td>
+            <td>
+                <span class="badge badge-secondary">${channel.language || 'unknown'}</span>
+            </td>
+            <td>
+                <span class="badge badge-success">${channel.members_count.toLocaleString()}</span>
+            </td>
+            <td>
+                <span class="badge badge-warning">${channel.found_by_keyword}</span>
+            </td>
+            <td>
+                <span class="badge badge-${getJoinStatusBadge(channel.join_status)}">
+                    ${getJoinStatusText(channel.join_status)}
+                </span>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-info" onclick="showChannelDetails('${channel.channel_id}')">
+                    <i class="fas fa-info"></i>
+                </button>
+                <button class="btn btn-sm btn-success" onclick="joinChannel('${channel.channel_id}')">
+                    <i class="fas fa-sign-in-alt"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function getJoinStatusBadge(status) {
+    switch(status) {
+        case 'joined': return 'success';
+        case 'banned': return 'danger';
+        case 'failed': return 'warning';
+        default: return 'secondary';
+    }
+}
+
+function getJoinStatusText(status) {
+    switch(status) {
+        case 'joined': return 'Вступил';
+        case 'banned': return 'Забанен';
+        case 'failed': return 'Ошибка';
+        default: return 'Не вступал';
+    }
+}
+
+function updateStats() {
+    const total = filteredChannels.length;
+    const channels = filteredChannels.filter(c => c.type === 'channel').length;
+    const groups = filteredChannels.filter(c => c.type === 'group').length;
+    const languages = [...new Set(filteredChannels.map(c => c.language))].length;
+    const totalMembers = filteredChannels.reduce((sum, c) => sum + c.members_count, 0);
+    
+    document.getElementById('channelsStats').innerHTML = `
+        Всего: ${total} | Каналы: ${channels} | Чаты: ${groups} | 
+        Языков: ${languages} | Участников: ${totalMembers.toLocaleString()}
+    `;
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.channel-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+    
+    updateMassActionsVisibility();
+}
+
+function updateMassActionsVisibility() {
+    const checkedBoxes = document.querySelectorAll('.channel-checkbox:checked');
+    const massActions = document.getElementById('massActions');
+    
+    if (checkedBoxes.length > 0) {
+        massActions.style.display = 'block';
+    } else {
+        massActions.style.display = 'none';
+    }
+}
+
+function joinChannel(channelId) {
+    if (confirm('Вступить в этот канал?')) {
+        joinChannels([channelId]);
+    }
+}
+
+function joinSelectedChannels() {
+    const checkedBoxes = document.querySelectorAll('.channel-checkbox:checked');
+    const channelIds = Array.from(checkedBoxes).map(cb => cb.value);
+    
+    if (channelIds.length === 0) {
+        alert('Выберите каналы для вступления');
+        return;
+    }
+    
+    if (confirm(`Вступить в ${channelIds.length} выбранных каналов?`)) {
+        joinChannels(channelIds);
+    }
+}
+
+function joinChannels(channelIds) {
+    showLoading();
+    
+    fetch('/api/join-channels', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            channel_ids: channelIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            alert('Вступление в каналы запущено!');
+            setTimeout(loadFoundChannels, 5000);
+        } else {
+            alert('Ошибка: ' + data.error);
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Ошибка:', error);
+        alert('Ошибка при вступлении в каналы');
+    });
+}
+
+function showChannelDetails(channelId) {
+    const channel = allChannels.find(c => c.channel_id === channelId);
+    if (!channel) return;
+    
+    const content = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Основная информация</h6>
+                <p><strong>Название:</strong> ${channel.title || 'Без названия'}</p>
+                <p><strong>Username:</strong> ${channel.username ? '@' + channel.username : 'Нет'}</p>
+                <p><strong>Тип:</strong> ${channel.type === 'channel' ? 'Канал' : 'Чат'}</p>
+                <p><strong>Язык:</strong> ${channel.language || 'Не определен'}</p>
+                <p><strong>Участники:</strong> ${channel.members_count.toLocaleString()}</p>
+            </div>
+            <div class="col-md-6">
+                <h6>Дополнительно</h6>
+                <p><strong>Найден по:</strong> ${channel.found_by_keyword}</p>
+                <p><strong>Статус:</strong> ${getJoinStatusText(channel.join_status)}</p>
+                <p><strong>Дата добавления:</strong> ${new Date(channel.created_at).toLocaleString()}</p>
+            </div>
+        </div>
+        ${channel.description ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6>Описание</h6>
+                    <p class="text-muted">${channel.description}</p>
+                </div>
+            </div>
+        ` : ''}
+    `;
+    
+    document.getElementById('channelDetailsContent').innerHTML = content;
+    $('#channelDetailsModal').modal('show');
+}
+
+function joinChannelFromModal() {
+    const channelId = document.querySelector('.channel-checkbox:checked')?.value;
+    if (channelId) {
+        $('#channelDetailsModal').modal('hide');
+        joinChannel(channelId);
+    }
+}
+
+function exportSelectedChannels() {
+    const checkedBoxes = document.querySelectorAll('.channel-checkbox:checked');
+    const selectedChannels = Array.from(checkedBoxes).map(cb => {
+        const channel = allChannels.find(c => c.channel_id === cb.value);
+        return channel;
+    });
+    
+    if (selectedChannels.length === 0) {
+        alert('Выберите каналы для экспорта');
+        return;
+    }
+    
+    const csvContent = [
+        ['Название', 'Username', 'Тип', 'Язык', 'Участники', 'Ключевое слово', 'Статус'],
+        ...selectedChannels.map(channel => [
+            channel.title || '',
+            channel.username || '',
+            channel.type,
+            channel.language || '',
+            channel.members_count,
+            channel.found_by_keyword,
+            channel.join_status
+        ])
+    ].map(row => row.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `channels_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function addSelectedToBlacklist() {
+    const checkedBoxes = document.querySelectorAll('.channel-checkbox:checked');
+    const channelIds = Array.from(checkedBoxes).map(cb => cb.value);
+    
+    if (channelIds.length === 0) {
+        alert('Выберите каналы для добавления в blacklist');
+        return;
+    }
+    
+    if (confirm(`Добавить ${channelIds.length} каналов в blacklist?`)) {
+        // Здесь можно добавить API вызов для добавления в blacklist
+        alert('Функция добавления в blacklist будет реализована');
+    }
+}
+
+// Добавляем обработчики для чекбоксов
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('channel-checkbox')) {
+        updateMassActionsVisibility();
+    }
+});
+
+// Загружаем каналы при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadFoundChannels();
+});
+</script>
+{% endblock %}
