@@ -32,9 +32,9 @@
                             </div>
                             
                             <div class="mb-3" id="fileUploadSection" style="display: none;">
-                                <label class="form-label">Файл с получателями:</label>
-                                <input type="file" class="form-control" id="recipientsFile" accept=".csv,.txt,.json">
-                                <div class="form-text">Поддерживаются форматы: CSV, TXT, JSON</div>
+                                <label class="form-label">Файл с юзернеймами:</label>
+                                <input type="file" class="form-control" id="usernamesFile" accept=".txt,.csv">
+                                <div class="form-text">Формат: один юзернейм на строку (@username или username)</div>
                             </div>
                             
                             <div class="mb-3">
@@ -327,43 +327,102 @@ function validateCampaignForm() {
 function startCampaign(formData) {
     showLoadingModal();
     
-    // Имитация создания кампании
-    setTimeout(() => {
+    // Если выбран файл, сначала загружаем его
+    if (formData.target_database === 'custom') {
+        const fileInput = document.getElementById('usernamesFile');
+        if (!fileInput.files[0]) {
+            hideLoadingModal();
+            showNotification('Выберите файл с юзернеймами', 'error');
+            return;
+        }
+        
+        uploadUsernamesFile(fileInput.files[0], formData);
+    } else {
+        // Запускаем кампанию с базой данных
+        launchSpamCampaign(formData, null);
+    }
+}
+
+function uploadUsernamesFile(file, formData) {
+    const formDataUpload = new FormData();
+    formDataUpload.append('file', file);
+    
+    fetch('/api/upload-usernames', {
+        method: 'POST',
+        body: formDataUpload
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            formData.usernames_file = data.filepath;
+            launchSpamCampaign(formData, data.count);
+        } else {
+            hideLoadingModal();
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка загрузки файла:', error);
+        showNotification('Ошибка загрузки файла', 'error');
+    });
+}
+
+function launchSpamCampaign(formData, usernamesCount) {
+    // Отправляем данные на сервер для запуска спам-кампании
+    fetch('/api/start-spam', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
         hideLoadingModal();
         
-        const campaign = {
-            id: Date.now(),
-            name: formData.name,
-            target_database: formData.target_database,
-            message: formData.message,
-            target_count: Math.floor(Math.random() * 5000) + 1000,
-            sent_count: 0,
-            success_count: 0,
-            error_count: 0,
-            status: 'running',
-            created_at: new Date().toISOString(),
-            started_at: new Date().toISOString()
-        };
-        
-        activeCampaigns.push(campaign);
-        campaigns.unshift(campaign);
-        
-        displayActiveCampaigns();
-        displayCampaignsHistory();
-        
-        addCampaignLog(`Кампания "${formData.name}" запущена`, 'info');
-        addCampaignLog(`Целевая база: ${formData.target_database}`, 'info');
-        addCampaignLog(`Получателей: ${campaign.target_count}`, 'info');
-        
-        // Имитация работы рассылки
-        simulateCampaign(campaign.id);
-        
-        showNotification('Кампания запущена', 'success');
-        
-        // Очищаем форму
-        document.getElementById('campaignForm').reset();
-        document.getElementById('fileUploadSection').style.display = 'none';
-    }, 1000);
+        if (data.success) {
+            const campaign = {
+                id: Date.now(),
+                name: formData.name,
+                target_database: formData.target_database,
+                message: formData.message,
+                target_count: usernamesCount || Math.floor(Math.random() * 5000) + 1000,
+                sent_count: 0,
+                success_count: 0,
+                error_count: 0,
+                status: 'running',
+                created_at: new Date().toISOString(),
+                started_at: new Date().toISOString()
+            };
+            
+            activeCampaigns.push(campaign);
+            campaigns.unshift(campaign);
+            
+            displayActiveCampaigns();
+            displayCampaignsHistory();
+            
+            addCampaignLog(`Спам-кампания "${formData.name}" запущена`, 'info');
+            addCampaignLog(`Источник: ${formData.target_database}`, 'info');
+            addCampaignLog(`Юзернеймов: ${campaign.target_count}`, 'info');
+            
+            // Имитация работы рассылки
+            simulateCampaign(campaign.id);
+            
+            showNotification('Спам-кампания запущена', 'success');
+            
+            // Очищаем форму
+            document.getElementById('campaignForm').reset();
+            document.getElementById('fileUploadSection').style.display = 'none';
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка запуска кампании:', error);
+        showNotification('Ошибка запуска кампании', 'error');
+    });
 }
 
 function simulateCampaign(campaignId) {

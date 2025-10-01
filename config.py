@@ -16,9 +16,10 @@ class Config:
     # База данных
     DATABASE_PATH = os.environ.get('DATABASE_PATH') or 'telegram_platform.db'
     
-    # Telegram API (получить на https://my.telegram.org)
-    API_ID = int(os.environ.get('API_ID', '12345678'))  # Замените на ваш API ID
-    API_HASH = os.environ.get('API_HASH', 'your_api_hash_here')  # Замените на ваш API Hash
+    # Telegram API (не требуется для готовых сессий)
+    # API_ID и API_HASH будут извлекаться из файлов сессий автоматически
+    API_ID = None  # Будет определяться из сессий
+    API_HASH = None  # Будет определяться из сессий
     
     # Настройки сервера
     HOST = os.environ.get('HOST', '0.0.0.0')

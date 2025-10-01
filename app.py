@@ -63,6 +63,8 @@ class DatabaseManager:
                 proxy_id INTEGER,
                 geo_country TEXT,
                 session_file TEXT,
+                api_id INTEGER,
+                api_hash TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_check TIMESTAMP,
                 FOREIGN KEY (proxy_id) REFERENCES proxies (id)
@@ -237,11 +239,33 @@ class AccountManager:
                     # Извлекаем номер телефона из имени файла
                     phone = os.path.basename(session_file).replace('.session', '')
                     
+                    # Извлекаем API ключи из сессии
+                    api_id, api_hash = extract_api_from_session(session_file)
+                    
+                    # Пытаемся получить информацию об аккаунте
+                    try:
+                        client = TelegramClient(session_file, api_id, api_hash)
+                        with client:
+                            me = client.get_me()
+                            username = me.username or ''
+                            first_name = me.first_name or ''
+                            last_name = me.last_name or ''
+                            status = 'online'
+                    except Exception as e:
+                        logger.warning(f"Не удалось подключиться к аккаунту {phone}: {e}")
+                        username = ''
+                        first_name = ''
+                        last_name = ''
+                        status = 'offline'
+                    
                     cursor.execute('''
-                        INSERT OR IGNORE INTO accounts (phone, session_file)
-                        VALUES (?, ?)
-                    ''', (phone, session_file))
+                        INSERT OR REPLACE INTO accounts (phone, username, first_name, last_name, status, session_file, api_id, api_hash)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (phone, username, first_name, last_name, status, session_file, api_id, api_hash))
                     loaded_count += 1
+                    
+                    logger.info(f"Загружен аккаунт: {phone} (@{username}) - {first_name} {last_name}")
+                    
                 except Exception as e:
                     logger.error(f"Ошибка загрузки сессии {session_file}: {e}")
             
@@ -292,7 +316,7 @@ class AccountManager:
     
     def mass_check_accounts(self):
         """Массовая проверка аккаунтов (ТП)"""
-        def check_account(account_id, session_file, proxy_data):
+        def check_account(account_id, session_file, api_id, api_hash, proxy_data):
             try:
                 # Создаем клиент с прокси
                 client = TelegramClient(session_file, api_id, api_hash)
@@ -325,7 +349,7 @@ class AccountManager:
                 conn.commit()
                 conn.close()
                 
-                logger.info(f"Аккаунт {account_id}: ТП пройдена, статус 🟢 Онлайн")
+                logger.info(f"Аккаунт {account_id} (@{username}): ТП пройдена, статус 🟢 Онлайн")
                 
             except Exception as e:
                 # Обновляем статус на ошибку
@@ -344,10 +368,10 @@ class AccountManager:
         conn = sqlite3.connect(self.db.db_path)
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT a.id, a.session_file, p.ip, p.port, p.username, p.password
+            SELECT a.id, a.session_file, a.api_id, a.api_hash, p.ip, p.port, p.username, p.password
             FROM accounts a
             LEFT JOIN proxies p ON a.proxy_id = p.id
-            WHERE a.status != 'banned'
+            WHERE a.status != 'banned' AND a.api_id IS NOT NULL
         ''')
         
         accounts_to_check = cursor.fetchall()
@@ -355,22 +379,252 @@ class AccountManager:
         
         threads = []
         for account_data in accounts_to_check:
-            account_id, session_file, ip, port, username, password = account_data
+            account_id, session_file, api_id, api_hash, ip, port, username, password = account_data
             proxy_data = None
             if ip:
                 proxy_data = {'ip': ip, 'port': port, 'username': username, 'password': password}
             
-            thread = threading.Thread(target=check_account, args=(account_id, session_file, proxy_data))
+            thread = threading.Thread(target=check_account, args=(account_id, session_file, api_id, api_hash, proxy_data))
             thread.start()
             threads.append(thread)
         
         logger.info(f"Запущена проверка {len(accounts_to_check)} аккаунтов")
         return len(accounts_to_check)
 
+class SpamManager:
+    def __init__(self, db_manager, account_manager):
+        self.db = db_manager
+        self.account_manager = account_manager
+        self.active_campaigns = {}
+    
+    def start_spam_campaign(self, campaign_data):
+        """Запуск спам-кампании"""
+        campaign_id = campaign_data.get('id', int(time.time()))
+        
+        # Получаем список юзернеймов для рассылки
+        usernames = self.get_usernames_for_campaign(campaign_data)
+        
+        if not usernames:
+            logger.error("Нет юзернеймов для рассылки")
+            return False
+        
+        # Получаем активные аккаунты
+        active_accounts = self.get_active_accounts()
+        
+        if not active_accounts:
+            logger.error("Нет активных аккаунтов")
+            return False
+        
+        # Создаем кампанию
+        campaign = {
+            'id': campaign_id,
+            'name': campaign_data.get('name', f'Campaign_{campaign_id}'),
+            'message': campaign_data.get('message', ''),
+            'usernames': usernames,
+            'accounts': active_accounts,
+            'status': 'running',
+            'sent_count': 0,
+            'success_count': 0,
+            'error_count': 0,
+            'started_at': datetime.now().isoformat()
+        }
+        
+        self.active_campaigns[campaign_id] = campaign
+        
+        # Запускаем рассылку в отдельном потоке
+        thread = threading.Thread(target=self.run_spam_campaign, args=(campaign_id,))
+        thread.daemon = True
+        thread.start()
+        
+        logger.info(f"Запущена спам-кампания {campaign_id} на {len(usernames)} юзернеймов")
+        return True
+    
+    def get_usernames_for_campaign(self, campaign_data):
+        """Получение списка юзернеймов для рассылки"""
+        usernames = []
+        
+        # Если указан файл с юзернеймами
+        if campaign_data.get('usernames_file'):
+            try:
+                with open(campaign_data['usernames_file'], 'r', encoding='utf-8') as f:
+                    for line in f:
+                        username = line.strip()
+                        if username and not username.startswith('#'):
+                            if not username.startswith('@'):
+                                username = '@' + username
+                            usernames.append(username)
+            except Exception as e:
+                logger.error(f"Ошибка чтения файла юзернеймов: {e}")
+        
+        # Если указана база данных
+        elif campaign_data.get('database'):
+            try:
+                conn = sqlite3.connect(self.db.db_path)
+                cursor = conn.cursor()
+                cursor.execute('SELECT DISTINCT username FROM parsed_users WHERE username IS NOT NULL AND username != ""')
+                results = cursor.fetchall()
+                usernames = ['@' + row[0] if not row[0].startswith('@') else row[0] for row in results]
+                conn.close()
+            except Exception as e:
+                logger.error(f"Ошибка получения юзернеймов из БД: {e}")
+        
+        return usernames
+    
+    def get_active_accounts(self):
+        """Получение активных аккаунтов"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT a.id, a.session_file, a.api_id, a.api_hash, p.ip, p.port, p.username, p.password
+                FROM accounts a
+                LEFT JOIN proxies p ON a.proxy_id = p.id
+                WHERE a.status = 'online' AND a.api_id IS NOT NULL
+                ORDER BY RANDOM()
+            ''')
+            
+            accounts = []
+            for row in cursor.fetchall():
+                account = {
+                    'id': row[0],
+                    'session_file': row[1],
+                    'api_id': row[2],
+                    'api_hash': row[3],
+                    'proxy': None
+                }
+                
+                if row[4]:  # Если есть прокси
+                    account['proxy'] = {
+                        'ip': row[4],
+                        'port': row[5],
+                        'username': row[6],
+                        'password': row[7]
+                    }
+                
+                accounts.append(account)
+            
+            conn.close()
+            return accounts
+        except Exception as e:
+            logger.error(f"Ошибка получения активных аккаунтов: {e}")
+            return []
+    
+    def run_spam_campaign(self, campaign_id):
+        """Выполнение спам-кампании"""
+        campaign = self.active_campaigns.get(campaign_id)
+        if not campaign:
+            return
+        
+        message = campaign['message']
+        usernames = campaign['usernames']
+        accounts = campaign['accounts']
+        
+        account_index = 0
+        sent_count = 0
+        
+        for username in usernames:
+            if campaign['status'] != 'running':
+                break
+            
+            # Выбираем аккаунт
+            account = accounts[account_index % len(accounts)]
+            account_index += 1
+            
+            # Отправляем сообщение
+            success = self.send_message(account, username, message)
+            
+            if success:
+                campaign['success_count'] += 1
+                logger.info(f"✅ Отправлено {username} через аккаунт {account['id']}")
+            else:
+                campaign['error_count'] += 1
+                logger.error(f"❌ Ошибка отправки {username} через аккаунт {account['id']}")
+            
+            campaign['sent_count'] += 1
+            sent_count += 1
+            
+            # Задержка между сообщениями
+            delay = random.randint(3, 10)
+            time.sleep(delay)
+            
+            # Задержка между аккаунтами
+            if account_index % 10 == 0:
+                time.sleep(random.randint(10, 30))
+        
+        campaign['status'] = 'completed'
+        campaign['completed_at'] = datetime.now().isoformat()
+        
+        logger.info(f"Кампания {campaign_id} завершена. Отправлено: {campaign['success_count']}/{campaign['sent_count']}")
+    
+    def send_message(self, account, username, message):
+        """Отправка сообщения"""
+        try:
+            client = TelegramClient(account['session_file'], account['api_id'], account['api_hash'])
+            
+            # Настраиваем прокси если есть
+            if account['proxy']:
+                proxy = {
+                    'proxy_type': 'http',
+                    'addr': account['proxy']['ip'],
+                    'port': account['proxy']['port'],
+                    'username': account['proxy']['username'],
+                    'password': account['proxy']['password']
+                }
+                client.set_proxy(proxy)
+            
+            with client:
+                # Отправляем сообщение
+                client.send_message(username, message)
+                return True
+                
+        except FloodWaitError as e:
+            logger.warning(f"FloodWait для аккаунта {account['id']}: {e.seconds} сек")
+            time.sleep(e.seconds)
+            return False
+        except UserBannedError:
+            logger.warning(f"Пользователь {username} заблокировал бота")
+            self.add_to_blacklist(username, 'USER_BANNED')
+            return False
+        except ChatWriteForbiddenError:
+            logger.warning(f"Нельзя писать в чат {username}")
+            self.add_to_blacklist(username, 'CHAT_FORBIDDEN')
+            return False
+        except Exception as e:
+            logger.error(f"Ошибка отправки сообщения {username}: {e}")
+            return False
+    
+    def add_to_blacklist(self, username, reason):
+        """Добавление в blacklist"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR IGNORE INTO blacklist (user_id, username, reason)
+                VALUES (?, ?, ?)
+            ''', (username, username, reason))
+            conn.commit()
+            conn.close()
+            logger.info(f"Добавлен в blacklist: {username} (причина: {reason})")
+        except Exception as e:
+            logger.error(f"Ошибка добавления в blacklist: {e}")
+    
+    def stop_campaign(self, campaign_id):
+        """Остановка кампании"""
+        if campaign_id in self.active_campaigns:
+            self.active_campaigns[campaign_id]['status'] = 'stopped'
+            logger.info(f"Кампания {campaign_id} остановлена")
+            return True
+        return False
+    
+    def get_campaign_stats(self, campaign_id):
+        """Получение статистики кампании"""
+        return self.active_campaigns.get(campaign_id, {})
+
 # Инициализация менеджеров
 db_manager = DatabaseManager()
 proxy_manager = ProxyManager(db_manager)
 account_manager = AccountManager(db_manager, proxy_manager)
+spam_manager = SpamManager(db_manager, account_manager)
 
 # Импорт конфигурации
 from config import config
@@ -379,9 +633,29 @@ from config import config
 config_name = os.environ.get('FLASK_ENV', 'default')
 app_config = config[config_name]
 
-# API ключи Telegram (настройте в config.py или через переменные окружения)
-api_id = app_config.API_ID
-api_hash = app_config.API_HASH
+# API ключи будут извлекаться из сессий автоматически
+api_id = None
+api_hash = None
+
+def extract_api_from_session(session_file):
+    """Извлечение API ключей из файла сессии"""
+    try:
+        import sqlite3
+        conn = sqlite3.connect(session_file)
+        cursor = conn.cursor()
+        
+        # Получаем API данные из сессии
+        cursor.execute("SELECT api_id, api_hash FROM sessions WHERE dc_id = 2")
+        result = cursor.fetchone()
+        
+        if result:
+            return result[0], result[1]
+        
+        conn.close()
+        return None, None
+    except Exception as e:
+        logger.error(f"Ошибка извлечения API из сессии {session_file}: {e}")
+        return None, None
 
 @app.route('/')
 def index():
@@ -543,6 +817,96 @@ def get_stats():
         })
     except Exception as e:
         logger.error(f"Ошибка получения статистики: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/start-spam', methods=['POST'])
+def start_spam():
+    """Запуск спам-кампании"""
+    try:
+        campaign_data = request.json
+        
+        # Валидация данных
+        if not campaign_data.get('message'):
+            return jsonify({'error': 'Сообщение не указано'}), 400
+        
+        if not campaign_data.get('usernames_file') and not campaign_data.get('database'):
+            return jsonify({'error': 'Не указан источник юзернеймов'}), 400
+        
+        # Запускаем кампанию
+        success = spam_manager.start_spam_campaign(campaign_data)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Спам-кампания запущена'})
+        else:
+            return jsonify({'error': 'Не удалось запустить кампанию'}), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка запуска спам-кампании: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/stop-spam/<int:campaign_id>', methods=['POST'])
+def stop_spam(campaign_id):
+    """Остановка спам-кампании"""
+    try:
+        success = spam_manager.stop_campaign(campaign_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Кампания остановлена'})
+        else:
+            return jsonify({'error': 'Кампания не найдена'}), 404
+            
+    except Exception as e:
+        logger.error(f"Ошибка остановки кампании: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spam-stats/<int:campaign_id>', methods=['GET'])
+def get_spam_stats(campaign_id):
+    """Получение статистики спам-кампании"""
+    try:
+        stats = spam_manager.get_campaign_stats(campaign_id)
+        
+        if stats:
+            return jsonify(stats)
+        else:
+            return jsonify({'error': 'Кампания не найдена'}), 404
+            
+    except Exception as e:
+        logger.error(f"Ошибка получения статистики: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/upload-usernames', methods=['POST'])
+def upload_usernames():
+    """Загрузка файла с юзернеймами"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'Файл не выбран'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'Файл не выбран'}), 400
+        
+        # Сохраняем файл
+        filename = f"usernames_{int(time.time())}.txt"
+        filepath = os.path.join('uploads', filename)
+        os.makedirs('uploads', exist_ok=True)
+        file.save(filepath)
+        
+        # Подсчитываем количество юзернеймов
+        count = 0
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip() and not line.startswith('#'):
+                    count += 1
+        
+        return jsonify({
+            'success': True, 
+            'filename': filename,
+            'filepath': filepath,
+            'count': count
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка загрузки файла юзернеймов: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

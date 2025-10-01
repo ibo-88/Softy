@@ -1,0 +1,14 @@
+# Пример файла с юзернеймами для рассылки
+# Формат: один юзернейм на строку
+# Можно использовать с @ или без
+
+@username1
+@username2
+username3
+@username4
+username5
+
+# Комментарии игнорируются
+@target_user1
+@target_user2
+@target_user3
