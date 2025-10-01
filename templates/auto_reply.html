@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+
+{% block title %}Автоответчик - Telegram Mass Platform{% endblock %}
+{% block page_title %}🤖 Автоответчик{% endblock %}
+
+{% block content %}
+<!-- Панель настройки автоответа -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Настроить автоответ</h5>
+            </div>
+            <div class="card-body">
+                <form id="autoReplyForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Аккаунт:</label>
+                                <select class="form-select" id="accountSelect" required>
+                                    <option value="">Выберите аккаунт</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Ключевые слова:</label>
+                                <textarea class="form-control" id="triggerWords" rows="3" 
+                                    placeholder="Введите ключевые слова через запятую&#10;Например: привет, hello, hi" required></textarea>
+                                <div class="form-text">Слова, при которых будет срабатывать автоответ</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Задержка ответа (секунды):</label>
+                                <input type="number" class="form-control" id="delaySeconds" value="0" min="0" max="3600">
+                                <div class="form-text">0 = мгновенный ответ, больше 0 = задержка</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Ответное сообщение:</label>
+                                <textarea class="form-control" id="responseMessage" rows="6" 
+                                    placeholder="Введите текст ответного сообщения" required></textarea>
+                                <div class="form-text">Сообщение, которое будет отправлено в ответ</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-primary" onclick="saveAutoReply()">
+                                    <i class="fas fa-save"></i> Сохранить автоответ
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="previewAutoReply()">
+                                    <i class="fas fa-eye"></i> Предварительный просмотр
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Активные автоответы -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Активные автоответы</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadAutoReplies()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="autoRepliesTable">
+                        <thead>
+                            <tr>
+                                <th>Аккаунт</th>
+                                <th>Ключевые слова</th>
+                                <th>Ответ</th>
+                                <th>Задержка</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="autoRepliesTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Загрузка автоответов...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика автоответов -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">📊 Статистика автоответов</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-primary">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="totalAutoReplies">0</h3>
+                                <p>Активных автоответов</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-success">
+                                <i class="fas fa-reply"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="totalReplies">0</h3>
+                                <p>Отправлено ответов</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-info">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="avgResponseTime">0с</h3>
+                                <p>Среднее время ответа</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-warning">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="responseRate">0%</h3>
+                                <p>Процент ответов</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Логи автоответов -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">📝 Логи автоответов</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="clearAutoReplyLogs()">
+                        <i class="fas fa-trash"></i> Очистить логи
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="log-container" id="autoReplyLogs">
+                    <div class="log-entry">
+                        <span class="log-time">[12:34:56]</span>
+                        <span class="log-level info">[INFO]</span>
+                        <span class="log-message">Автоответчик запущен и готов к работе</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно предварительного просмотра -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Предварительный просмотр автоответа</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-message">
+                    <div class="message-bubble incoming">
+                        <div class="message-text">Привет! Как дела?</div>
+                        <div class="message-time">12:34</div>
+                    </div>
+                    <div class="message-bubble outgoing" id="previewResponse">
+                        <div class="message-text" id="previewText"></div>
+                        <div class="message-time">12:34</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stat-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.stat-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    color: white;
+    font-size: 1.5rem;
+}
+
+.stat-content h3 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.stat-content p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.log-container {
+    background: #1e1e1e;
+    color: #ffffff;
+    padding: 1rem;
+    border-radius: 8px;
+    height: 300px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.log-entry {
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+.log-time {
+    color: #888;
+}
+
+.log-level {
+    font-weight: bold;
+    margin: 0 0.5rem;
+}
+
+.log-level.info { color: #17a2b8; }
+.log-level.success { color: #28a745; }
+.log-level.warning { color: #ffc107; }
+.log-level.error { color: #dc3545; }
+
+.log-message {
+    color: #ffffff;
+}
+
+.preview-message {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.message-bubble {
+    margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    border-radius: 18px;
+    max-width: 80%;
+    position: relative;
+}
+
+.message-bubble.incoming {
+    background: #e9ecef;
+    margin-right: auto;
+}
+
+.message-bubble.outgoing {
+    background: #007bff;
+    color: white;
+    margin-left: auto;
+}
+
+.message-time {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    text-align: right;
+    margin-top: 0.25rem;
+}
+</style>
+
+<script>
+let autoReplies = [];
+
+// Загрузка аккаунтов для выбора
+function loadAccounts() {
+    fetch('/api/accounts')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const select = document.getElementById('accountSelect');
+            select.innerHTML = '<option value="">Выберите аккаунт</option>';
+            
+            data.accounts.forEach(account => {
+                if (account.status === 'online') {
+                    const option = document.createElement('option');
+                    option.value = account.id;
+                    option.textContent = `@${account.username || account.phone} (${account.first_name || 'Без имени'})`;
+                    select.appendChild(option);
+                }
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка загрузки аккаунтов:', error);
+    });
+}
+
+// Сохранение автоответа
+function saveAutoReply() {
+    const accountId = document.getElementById('accountSelect').value;
+    const triggerWordsText = document.getElementById('triggerWords').value;
+    const responseMessage = document.getElementById('responseMessage').value;
+    const delaySeconds = parseInt(document.getElementById('delaySeconds').value) || 0;
+    
+    if (!accountId || !triggerWordsText || !responseMessage) {
+        showNotification('Заполните все обязательные поля', 'error');
+        return;
+    }
+    
+    const triggerWords = triggerWordsText.split(',').map(word => word.trim()).filter(word => word);
+    
+    const autoReplyData = {
+        account_id: accountId,
+        trigger_words: triggerWords,
+        response_message: responseMessage,
+        delay_seconds: delaySeconds
+    };
+    
+    fetch('/api/set-auto-reply', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(autoReplyData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Автоответ сохранен успешно', 'success');
+            loadAutoReplies();
+            clearForm();
+            addAutoReplyLog('Автоответ сохранен для аккаунта ' + accountId, 'success');
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка сохранения автоответа:', error);
+        showNotification('Ошибка сохранения автоответа', 'error');
+    });
+}
+
+// Загрузка автоответов
+function loadAutoReplies() {
+    // В реальном приложении здесь был бы API запрос
+    // Для демонстрации используем моковые данные
+    const mockAutoReplies = [
+        {
+            id: 1,
+            account_id: 1,
+            account_name: '@user1',
+            trigger_words: ['привет', 'hello', 'hi'],
+            response_message: 'Привет! Как дела?',
+            delay_seconds: 2,
+            is_active: true,
+            created_at: '2024-01-15 10:30:00'
+        },
+        {
+            id: 2,
+            account_id: 2,
+            account_name: '@user2',
+            trigger_words: ['цена', 'стоимость', 'price'],
+            response_message: 'Цены уточняйте в личных сообщениях',
+            delay_seconds: 0,
+            is_active: true,
+            created_at: '2024-01-15 11:15:00'
+        }
+    ];
+    
+    displayAutoReplies(mockAutoReplies);
+    updateStats(mockAutoReplies);
+}
+
+// Отображение автоответов
+function displayAutoReplies(autoReplies) {
+    const tbody = document.getElementById('autoRepliesTableBody');
+    
+    if (autoReplies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Нет активных автоответов</td></tr>';
+        return;
+    }
+    
+    let html = '';
+    autoReplies.forEach(reply => {
+        const statusBadge = reply.is_active ? 
+            '<span class="badge bg-success">Активен</span>' : 
+            '<span class="badge bg-secondary">Неактивен</span>';
+        
+        const delayText = reply.delay_seconds > 0 ? `${reply.delay_seconds}с` : 'Мгновенно';
+        
+        html += `
+            <tr>
+                <td>${reply.account_name}</td>
+                <td>${reply.trigger_words.join(', ')}</td>
+                <td>${reply.response_message.substring(0, 50)}${reply.response_message.length > 50 ? '...' : ''}</td>
+                <td>${delayText}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="editAutoReply(${reply.id})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteAutoReply(${reply.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+// Обновление статистики
+function updateStats(autoReplies) {
+    document.getElementById('totalAutoReplies').textContent = autoReplies.length;
+    document.getElementById('totalReplies').textContent = Math.floor(Math.random() * 1000) + 100;
+    document.getElementById('avgResponseTime').textContent = '2.3с';
+    document.getElementById('responseRate').textContent = '95%';
+}
+
+// Предварительный просмотр автоответа
+function previewAutoReply() {
+    const responseMessage = document.getElementById('responseMessage').value;
+    
+    if (!responseMessage) {
+        showNotification('Введите ответное сообщение', 'error');
+        return;
+    }
+    
+    document.getElementById('previewText').textContent = responseMessage;
+    new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+// Очистка формы
+function clearForm() {
+    document.getElementById('autoReplyForm').reset();
+}
+
+// Добавление лога
+function addAutoReplyLog(message, level = 'info') {
+    const logsContainer = document.getElementById('autoReplyLogs');
+    const now = new Date();
+    const timeString = now.toLocaleTimeString();
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    logEntry.innerHTML = `
+        <span class="log-time">[${timeString}]</span>
+        <span class="log-level ${level}">[${level.toUpperCase()}]</span>
+        <span class="log-message">${message}</span>
+    `;
+    
+    logsContainer.appendChild(logEntry);
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+}
+
+// Очистка логов
+function clearAutoReplyLogs() {
+    if (confirm('Вы уверены, что хотите очистить все логи?')) {
+        document.getElementById('autoReplyLogs').innerHTML = '';
+        addAutoReplyLog('Логи очищены', 'info');
+    }
+}
+
+// Редактирование автоответа
+function editAutoReply(id) {
+    // Здесь должна быть логика редактирования
+    showNotification('Функция редактирования в разработке', 'info');
+}
+
+// Удаление автоответа
+function deleteAutoReply(id) {
+    if (confirm('Вы уверены, что хотите удалить этот автоответ?')) {
+        // Здесь должна быть логика удаления
+        showNotification('Автоответ удален', 'success');
+        loadAutoReplies();
+        addAutoReplyLog(`Автоответ ${id} удален`, 'warning');
+    }
+}
+
+// Загрузка данных при инициализации страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadAccounts();
+    loadAutoReplies();
+    addAutoReplyLog('Страница автоответчика загружена', 'info');
+});
+</script>
+{% endblock %}

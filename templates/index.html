@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд - Telegram Mass Platform{% endblock %}
+{% block page_title %}📊 Дашборд{% endblock %}
+
+{% block content %}
+<!-- Статистические карточки -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Всего аккаунтов
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-accounts">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-users fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Активных
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="online-accounts">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-danger shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                            Заблокировано
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="banned-accounts">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-ban fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Активных прокси
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="active-proxies">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-globe fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Графики -->
+<div class="row">
+    <div class="col-xl-8 col-lg-7">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Статус аккаунтов</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-pie pt-4 pb-2">
+                    <canvas id="accountsStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-lg-5">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Последние действия</h6>
+            </div>
+            <div class="card-body">
+                <div class="activity-feed" id="activity-feed">
+                    <div class="activity-item">
+                        <div class="activity-icon bg-primary text-white">
+                            <i class="fas fa-user-plus"></i>
+                        </div>
+                        <div class="activity-content">
+                            <div class="activity-title">Система запущена</div>
+                            <div class="activity-time">Только что</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Таблица последних аккаунтов -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Последние аккаунты</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="recentAccountsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Номер</th>
+                                <th>Имя</th>
+                                <th>Статус</th>
+                                <th>Гео-метка</th>
+                                <th>Прокси</th>
+                                <th>Последняя проверка</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Данные загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Инициализация дашборда
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardData();
+    loadRecentAccounts();
+    
+    // Обновление данных каждые 30 секунд
+    setInterval(loadDashboardData, 30000);
+});
+
+function loadDashboardData() {
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('total-accounts').textContent = data.total_accounts || 0;
+            document.getElementById('online-accounts').textContent = data.online_accounts || 0;
+            document.getElementById('banned-accounts').textContent = data.banned_accounts || 0;
+            document.getElementById('active-proxies').textContent = data.active_proxies || 0;
+            
+            updateAccountsStatusChart(data);
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки статистики:', error);
+            showNotification('Ошибка загрузки статистики', 'error');
+        });
+}
+
+function loadRecentAccounts() {
+    fetch('/api/accounts')
+        .then(response => response.json())
+        .then(accounts => {
+            const tbody = document.querySelector('#recentAccountsTable tbody');
+            tbody.innerHTML = '';
+            
+            // Показываем только последние 10 аккаунтов
+            accounts.slice(0, 10).forEach(account => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${account.id}</td>
+                    <td>${account.phone}</td>
+                    <td>${account.first_name} ${account.last_name}</td>
+                    <td><span class="badge ${getStatusBadgeClass(account.status)}">${getStatusText(account.status)}</span></td>
+                    <td>${account.geo_country ? getCountryFlag(account.geo_country) : '-'}</td>
+                    <td>${account.proxy || '-'}</td>
+                    <td>-</td>
+                `;
+                tbody.appendChild(row);
+            });
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки аккаунтов:', error);
+        });
+}
+
+function updateAccountsStatusChart(data) {
+    const ctx = document.getElementById('accountsStatusChart').getContext('2d');
+    
+    // Удаляем предыдущий график если существует
+    if (window.accountsChart) {
+        window.accountsChart.destroy();
+    }
+    
+    window.accountsChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Онлайн', 'Заблокировано', 'Офлайн'],
+            datasets: [{
+                data: [
+                    data.online_accounts || 0,
+                    data.banned_accounts || 0,
+                    (data.total_accounts || 0) - (data.online_accounts || 0) - (data.banned_accounts || 0)
+                ],
+                backgroundColor: ['#28a745', '#dc3545', '#6c757d'],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+function getStatusBadgeClass(status) {
+    switch(status) {
+        case 'online': return 'bg-success';
+        case 'banned': return 'bg-danger';
+        case 'checking': return 'bg-warning';
+        default: return 'bg-secondary';
+    }
+}
+
+function getStatusText(status) {
+    switch(status) {
+        case 'online': return '🟢 Онлайн';
+        case 'banned': return '🔴 Забанен';
+        case 'checking': return '🟡 Проверка';
+        default: return '⚫ Офлайн';
+    }
+}
+
+function getCountryFlag(country) {
+    const flags = {
+        'DE': '🇩🇪',
+        'US': '🇺🇸',
+        'RU': '🇷🇺',
+        'GB': '🇬🇧',
+        'FR': '🇫🇷',
+        'IT': '🇮🇹',
+        'ES': '🇪🇸',
+        'NL': '🇳🇱',
+        'PL': '🇵🇱',
+        'UA': '🇺🇦'
+    };
+    return flags[country] || '🌍';
+}
+
+function refreshData() {
+    loadDashboardData();
+    loadRecentAccounts();
+    showNotification('Данные обновлены', 'success');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,720 @@
+{% extends "base.html" %}
+
+{% block title %}Аналитика - Telegram Mass Platform{% endblock %}
+{% block page_title %}📊 Расширенная аналитика{% endblock %}
+
+{% block content %}
+<!-- Общая статистика -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary">
+                <i class="fas fa-paper-plane"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="totalMessages">0</h3>
+                <p>Отправлено сообщений</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-success">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="successRate">0%</h3>
+                <p>Процент доставки</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-info">
+                <i class="fas fa-eye"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="openRate">0%</h3>
+                <p>Процент прочтений</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning">
+                <i class="fas fa-mouse-pointer"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="clickRate">0%</h3>
+                <p>Процент кликов</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Фильтры и настройки -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Фильтры и настройки</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label class="form-label">Период:</label>
+                            <select class="form-select" id="periodFilter" onchange="updateAnalytics()">
+                                <option value="today">Сегодня</option>
+                                <option value="week">Неделя</option>
+                                <option value="month" selected>Месяц</option>
+                                <option value="quarter">Квартал</option>
+                                <option value="year">Год</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label class="form-label">Кампания:</label>
+                            <select class="form-select" id="campaignFilter" onchange="updateAnalytics()">
+                                <option value="">Все кампании</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label class="form-label">Аккаунт:</label>
+                            <select class="form-select" id="accountFilter" onchange="updateAnalytics()">
+                                <option value="">Все аккаунты</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label class="form-label">Действия:</label>
+                            <div class="btn-group w-100">
+                                <button class="btn btn-outline-primary" onclick="exportAnalytics()">
+                                    <i class="fas fa-download"></i> Экспорт
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="refreshAnalytics()">
+                                    <i class="fas fa-sync-alt"></i> Обновить
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Графики и диаграммы -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">📈 Динамика отправки сообщений</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="messagesChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🥧 Статусы доставки</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="statusChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Детальная аналитика -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">📊 Топ кампаний</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Кампания</th>
+                                <th>Отправлено</th>
+                                <th>Доставлено</th>
+                                <th>Процент</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topCampaignsTable">
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">Загрузка данных...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">⏰ Время активности</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="activityChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Географическая аналитика -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🌍 География получателей</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Страна</th>
+                                <th>Получено</th>
+                                <th>Процент</th>
+                            </tr>
+                        </thead>
+                        <tbody id="geographyTable">
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">Загрузка данных...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">📱 Устройства получателей</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="devicesChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Взаимодействия с сообщениями -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🔄 Взаимодействия с сообщениями</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="interaction-card">
+                            <div class="interaction-icon bg-primary">
+                                <i class="fas fa-eye"></i>
+                            </div>
+                            <div class="interaction-content">
+                                <h4 id="totalViews">0</h4>
+                                <p>Просмотры</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="interaction-card">
+                            <div class="interaction-icon bg-success">
+                                <i class="fas fa-reply"></i>
+                            </div>
+                            <div class="interaction-content">
+                                <h4 id="totalReplies">0</h4>
+                                <p>Ответы</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="interaction-card">
+                            <div class="interaction-icon bg-info">
+                                <i class="fas fa-share"></i>
+                            </div>
+                            <div class="interaction-content">
+                                <h4 id="totalShares">0</h4>
+                                <p>Пересылки</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="interaction-card">
+                            <div class="interaction-icon bg-warning">
+                                <i class="fas fa-heart"></i>
+                            </div>
+                            <div class="interaction-content">
+                                <h4 id="totalLikes">0</h4>
+                                <p>Реакции</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ROI и конверсии -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">💰 ROI и конверсии</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="roi-card">
+                            <h6>Общий ROI</h6>
+                            <h3 class="text-success" id="totalROI">+250%</h3>
+                            <p class="text-muted">За выбранный период</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="roi-card">
+                            <h6>Конверсия</h6>
+                            <h3 class="text-primary" id="conversionRate">12.5%</h3>
+                            <p class="text-muted">От просмотра к действию</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="roi-card">
+                            <h6>Стоимость клика</h6>
+                            <h3 class="text-info" id="costPerClick">$0.15</h3>
+                            <p class="text-muted">Средняя стоимость</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Экспорт и отчеты -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">📄 Экспорт и отчеты</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="export-card">
+                            <h6>Детальный отчет</h6>
+                            <p>Полная аналитика по всем метрикам</p>
+                            <button class="btn btn-primary" onclick="exportDetailedReport()">
+                                <i class="fas fa-file-pdf"></i> PDF
+                            </button>
+                            <button class="btn btn-success" onclick="exportDetailedReportCSV()">
+                                <i class="fas fa-file-csv"></i> CSV
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="export-card">
+                            <h6>Отчет по кампаниям</h6>
+                            <p>Аналитика по каждой кампании</p>
+                            <button class="btn btn-primary" onclick="exportCampaignReport()">
+                                <i class="fas fa-file-excel"></i> Excel
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="export-card">
+                            <h6>Настроить автоотчеты</h6>
+                            <p>Регулярная отправка отчетов</p>
+                            <button class="btn btn-outline-primary" onclick="setupAutoReports()">
+                                <i class="fas fa-cog"></i> Настроить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stat-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.stat-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    color: white;
+    font-size: 1.5rem;
+}
+
+.stat-content h3 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.stat-content p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.interaction-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.interaction-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.interaction-content h4 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.interaction-content p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.roi-card {
+    text-align: center;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.roi-card h6 {
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.roi-card h3 {
+    margin: 0.5rem 0;
+    font-size: 2.5rem;
+    font-weight: bold;
+}
+
+.export-card {
+    text-align: center;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.export-card h6 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.export-card p {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let messagesChart, statusChart, activityChart, devicesChart;
+
+// Загрузка аналитики
+function loadAnalytics() {
+    // Загружаем данные с сервера
+    fetch('/api/analytics/overview')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            updateOverviewStats(data.stats);
+            updateCharts(data.charts);
+            updateTables(data.tables);
+        } else {
+            console.error('Ошибка загрузки аналитики:', data.error);
+            loadMockData();
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка загрузки аналитики:', error);
+        loadMockData();
+    });
+}
+
+// Моковые данные для демонстрации
+function loadMockData() {
+    updateOverviewStats({
+        totalMessages: 15420,
+        successRate: 94.5,
+        openRate: 78.2,
+        clickRate: 12.8
+    });
+    
+    updateCharts({
+        messages: {
+            labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+            data: [1200, 1900, 3000, 5000, 2000, 3000, 4500]
+        },
+        status: {
+            delivered: 14500,
+            failed: 920,
+            pending: 0
+        },
+        activity: {
+            labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
+            data: [50, 30, 200, 500, 400, 300]
+        },
+        devices: {
+            mobile: 65,
+            desktop: 25,
+            web: 10
+        }
+    });
+    
+    updateTables({
+        campaigns: [
+            { name: 'Новогодняя акция', sent: 5000, delivered: 4800, rate: 96.0 },
+            { name: 'Распродажа', sent: 3000, delivered: 2850, rate: 95.0 },
+            { name: 'Приветствие', sent: 2000, delivered: 1900, rate: 95.0 }
+        ],
+        geography: [
+            { country: 'Россия', count: 8000, percentage: 52.0 },
+            { country: 'Украина', count: 3000, percentage: 19.5 },
+            { country: 'Беларусь', count: 2000, percentage: 13.0 },
+            { country: 'Казахстан', count: 1500, percentage: 9.7 },
+            { country: 'Другие', count: 920, percentage: 6.0 }
+        ]
+    });
+    
+    updateInteractionStats({
+        views: 12050,
+        replies: 850,
+        shares: 320,
+        likes: 2100
+    });
+}
+
+// Обновление общей статистики
+function updateOverviewStats(stats) {
+    document.getElementById('totalMessages').textContent = stats.totalMessages.toLocaleString();
+    document.getElementById('successRate').textContent = stats.successRate + '%';
+    document.getElementById('openRate').textContent = stats.openRate + '%';
+    document.getElementById('clickRate').textContent = stats.clickRate + '%';
+}
+
+// Обновление графиков
+function updateCharts(charts) {
+    // График сообщений
+    const messagesCtx = document.getElementById('messagesChart').getContext('2d');
+    if (messagesChart) messagesChart.destroy();
+    messagesChart = new Chart(messagesCtx, {
+        type: 'line',
+        data: {
+            labels: charts.messages.labels,
+            datasets: [{
+                label: 'Отправлено сообщений',
+                data: charts.messages.data,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // График статусов
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    if (statusChart) statusChart.destroy();
+    statusChart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Доставлено', 'Ошибка', 'В ожидании'],
+            datasets: [{
+                data: [charts.status.delivered, charts.status.failed, charts.status.pending],
+                backgroundColor: ['#28a745', '#dc3545', '#ffc107']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+    
+    // График активности
+    const activityCtx = document.getElementById('activityChart').getContext('2d');
+    if (activityChart) activityChart.destroy();
+    activityChart = new Chart(activityCtx, {
+        type: 'bar',
+        data: {
+            labels: charts.activity.labels,
+            datasets: [{
+                label: 'Активность',
+                data: charts.activity.data,
+                backgroundColor: '#17a2b8'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // График устройств
+    const devicesCtx = document.getElementById('devicesChart').getContext('2d');
+    if (devicesChart) devicesChart.destroy();
+    devicesChart = new Chart(devicesCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Мобильные', 'Десктоп', 'Веб'],
+            datasets: [{
+                data: [charts.devices.mobile, charts.devices.desktop, charts.devices.web],
+                backgroundColor: ['#007bff', '#28a745', '#ffc107']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+}
+
+// Обновление таблиц
+function updateTables(tables) {
+    // Топ кампаний
+    const campaignsTable = document.getElementById('topCampaignsTable');
+    let html = '';
+    tables.campaigns.forEach(campaign => {
+        html += `
+            <tr>
+                <td>${campaign.name}</td>
+                <td>${campaign.sent.toLocaleString()}</td>
+                <td>${campaign.delivered.toLocaleString()}</td>
+                <td><span class="badge bg-success">${campaign.rate}%</span></td>
+            </tr>
+        `;
+    });
+    campaignsTable.innerHTML = html;
+    
+    // География
+    const geographyTable = document.getElementById('geographyTable');
+    html = '';
+    tables.geography.forEach(geo => {
+        html += `
+            <tr>
+                <td>${geo.country}</td>
+                <td>${geo.count.toLocaleString()}</td>
+                <td>${geo.percentage}%</td>
+            </tr>
+        `;
+    });
+    geographyTable.innerHTML = html;
+}
+
+// Обновление статистики взаимодействий
+function updateInteractionStats(stats) {
+    document.getElementById('totalViews').textContent = stats.views.toLocaleString();
+    document.getElementById('totalReplies').textContent = stats.replies.toLocaleString();
+    document.getElementById('totalShares').textContent = stats.shares.toLocaleString();
+    document.getElementById('totalLikes').textContent = stats.likes.toLocaleString();
+}
+
+// Обновление аналитики при изменении фильтров
+function updateAnalytics() {
+    const period = document.getElementById('periodFilter').value;
+    const campaign = document.getElementById('campaignFilter').value;
+    const account = document.getElementById('accountFilter').value;
+    
+    // Здесь должен быть запрос к API с новыми фильтрами
+    loadAnalytics();
+}
+
+// Обновление данных
+function refreshAnalytics() {
+    loadAnalytics();
+    showNotification('Аналитика обновлена', 'success');
+}
+
+// Экспорт аналитики
+function exportAnalytics() {
+    showNotification('Экспорт аналитики в разработке', 'info');
+}
+
+// Экспорт детального отчета
+function exportDetailedReport() {
+    showNotification('Экспорт PDF отчета в разработке', 'info');
+}
+
+function exportDetailedReportCSV() {
+    showNotification('Экспорт CSV отчета в разработке', 'info');
+}
+
+// Экспорт отчета по кампаниям
+function exportCampaignReport() {
+    showNotification('Экспорт Excel отчета в разработке', 'info');
+}
+
+// Настройка автоотчетов
+function setupAutoReports() {
+    showNotification('Настройка автоотчетов в разработке', 'info');
+}
+
+// Загрузка данных при инициализации страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadAnalytics();
+});
+</script>
+{% endblock %}

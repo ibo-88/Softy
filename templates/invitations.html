@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}Приглашения - Telegram Mass Platform{% endblock %}
+{% block page_title %}📨 Массовые приглашения{% endblock %}
+
+{% block content %}
+<!-- Панель создания приглашений -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Создать кампанию приглашений</h5>
+            </div>
+            <div class="card-body">
+                <form id="invitationForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Название кампании:</label>
+                                <input type="text" class="form-control" id="campaignName" required placeholder="Приглашения в чат">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Ссылка на чат/канал:</label>
+                                <input type="text" class="form-control" id="chatLink" required placeholder="https://t.me/your_chat">
+                                <div class="form-text">Ссылка на ваш чат или канал</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Сообщение приглашения:</label>
+                                <textarea class="form-control" id="invitationMessage" rows="4" required placeholder="Приглашаю вас в наш чат! Здесь интересные обсуждения и полезная информация."></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Источник юзернеймов:</label>
+                                <select class="form-select" id="usernameSource" required onchange="toggleUsernameSource()">
+                                    <option value="">Выберите источник</option>
+                                    <option value="file">Загрузить файл</option>
+                                    <option value="database">База данных</option>
+                                    <option value="manual">Ввести вручную</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3" id="fileUploadSection" style="display: none;">
+                                <label class="form-label">Файл с юзернеймами:</label>
+                                <input type="file" class="form-control" id="usernamesFile" accept=".txt,.csv">
+                                <div class="form-text">Формат: один юзернейм на строку</div>
+                            </div>
+                            
+                            <div class="mb-3" id="manualInputSection" style="display: none;">
+                                <label class="form-label">Юзернеймы:</label>
+                                <textarea class="form-control" id="manualUsernames" rows="6" placeholder="@username1&#10;@username2&#10;username3"></textarea>
+                                <div class="form-text">Один юзернейм на строку</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Задержка между приглашениями (сек):</label>
+                                <input type="number" class="form-control" id="invitationDelay" value="15" min="5" max="300">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Максимум приглашений на аккаунт:</label>
+                                <input type="number" class="form-control" id="maxInvitationsPerAccount" value="20" min="1" max="100">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-primary" onclick="previewInvitation()">
+                            <i class="fas fa-eye"></i> Предварительный просмотр
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-paper-plane"></i> Запустить приглашения
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Активные кампании приглашений -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Активные кампании приглашений</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshInvitations()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="invitationsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Чат</th>
+                                <th>Прогресс</th>
+                                <th>Статус</th>
+                                <th>Успешно</th>
+                                <th>Ошибки</th>
+                                <th>Запущено</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Данные загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Логи приглашений -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Логи приглашений</h6>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="clearInvitationLogs()">
+                        <i class="fas fa-trash"></i> Очистить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="logs-container" id="invitationLogs" style="height: 400px; overflow-y: auto; background: #1e1e1e; color: #00ff00; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div class="log-entry">
+                        <span class="text-muted">[14:05:12]</span> Система приглашений готова к работе
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно предварительного просмотра -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Предварительный просмотр приглашения</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-message">
+                    <div class="message-bubble">
+                        <div id="previewText"></div>
+                        <div id="previewLink" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let invitationCampaigns = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadInvitationCampaigns();
+    
+    // Обновление каждые 10 секунд
+    setInterval(loadInvitationCampaigns, 10000);
+});
+
+function toggleUsernameSource() {
+    const source = document.getElementById('usernameSource').value;
+    
+    // Скрываем все секции
+    document.getElementById('fileUploadSection').style.display = 'none';
+    document.getElementById('manualInputSection').style.display = 'none';
+    
+    // Показываем нужную секцию
+    if (source === 'file') {
+        document.getElementById('fileUploadSection').style.display = 'block';
+    } else if (source === 'manual') {
+        document.getElementById('manualInputSection').style.display = 'block';
+    }
+}
+
+// Обработка формы приглашений
+document.getElementById('invitationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const campaignName = document.getElementById('campaignName').value;
+    const chatLink = document.getElementById('chatLink').value;
+    const invitationMessage = document.getElementById('invitationMessage').value;
+    const usernameSource = document.getElementById('usernameSource').value;
+    
+    if (!campaignName || !chatLink || !invitationMessage || !usernameSource) {
+        showNotification('Заполните все обязательные поля', 'error');
+        return;
+    }
+    
+    let usernames = [];
+    
+    if (usernameSource === 'file') {
+        const fileInput = document.getElementById('usernamesFile');
+        if (!fileInput.files[0]) {
+            showNotification('Выберите файл с юзернеймами', 'error');
+            return;
+        }
+        usernames = parseUsernamesFromFile(fileInput.files[0]);
+    } else if (usernameSource === 'manual') {
+        const manualInput = document.getElementById('manualUsernames').value;
+        usernames = manualInput.split('\n')
+            .map(username => username.trim())
+            .filter(username => username)
+            .map(username => username.startsWith('@') ? username : '@' + username);
+    } else if (usernameSource === 'database') {
+        // Получаем юзернеймы из базы данных
+        usernames = getUsernamesFromDatabase();
+    }
+    
+    if (usernames.length === 0) {
+        showNotification('Не найдено юзернеймов для приглашения', 'error');
+        return;
+    }
+    
+    startInvitationCampaign(campaignName, chatLink, invitationMessage, usernames);
+});
+
+function parseUsernamesFromFile(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            const usernames = content.split('\n')
+                .map(username => username.trim())
+                .filter(username => username && !username.startsWith('#'))
+                .map(username => username.startsWith('@') ? username : '@' + username);
+            resolve(usernames);
+        };
+        reader.readAsText(file);
+    });
+}
+
+function getUsernamesFromDatabase() {
+    // Имитация получения юзернеймов из базы данных
+    return ['@user1', '@user2', '@user3', '@user4', '@user5'];
+}
+
+function startInvitationCampaign(campaignName, chatLink, invitationMessage, usernames) {
+    showLoadingModal();
+    
+    const invitationData = {
+        usernames: usernames,
+        chat_link: chatLink,
+        message: invitationMessage
+    };
+    
+    fetch('/api/send-invitations', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(invitationData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            const campaign = {
+                id: Date.now(),
+                name: campaignName,
+                chat_link: chatLink,
+                target_count: usernames.length,
+                sent_count: 0,
+                success_count: 0,
+                error_count: 0,
+                status: 'running',
+                started_at: new Date().toISOString()
+            };
+            
+            invitationCampaigns.push(campaign);
+            displayInvitationCampaigns();
+            
+            addInvitationLog(`Кампания "${campaignName}" запущена`, 'info');
+            addInvitationLog(`Целевой чат: ${chatLink}`, 'info');
+            addInvitationLog(`Юзернеймов: ${usernames.length}`, 'info');
+            
+            // Имитация работы приглашений
+            simulateInvitationCampaign(campaign.id, usernames);
+            
+            showNotification('Кампания приглашений запущена', 'success');
+            
+            // Очищаем форму
+            document.getElementById('invitationForm').reset();
+            toggleUsernameSource();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка запуска приглашений:', error);
+        showNotification('Ошибка запуска приглашений', 'error');
+    });
+}
+
+function simulateInvitationCampaign(campaignId, usernames) {
+    const campaign = invitationCampaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+    
+    let processed = 0;
+    const total = usernames.length;
+    
+    const interval = setInterval(() => {
+        if (processed >= total || campaign.status !== 'running') {
+            clearInterval(interval);
+            campaign.status = 'completed';
+            addInvitationLog(`Кампания "${campaign.name}" завершена`, 'success');
+            addInvitationLog(`Итого отправлено: ${campaign.sent_count}`, 'success');
+            addInvitationLog(`Успешно: ${campaign.success_count}`, 'success');
+            addInvitationLog(`Ошибок: ${campaign.error_count}`, 'success');
+            displayInvitationCampaigns();
+            return;
+        }
+        
+        const username = usernames[processed];
+        const success = Math.random() > 0.15; // 85% успешных приглашений
+        
+        campaign.sent_count++;
+        
+        if (success) {
+            campaign.success_count++;
+            addInvitationLog(`✅ Приглашение отправлено ${username}`, 'success');
+        } else {
+            campaign.error_count++;
+            addInvitationLog(`❌ Ошибка отправки приглашения ${username}`, 'error');
+        }
+        
+        processed++;
+        displayInvitationCampaigns();
+    }, 3000);
+}
+
+function displayInvitationCampaigns() {
+    const tbody = document.querySelector('#invitationsTable tbody');
+    tbody.innerHTML = '';
+    
+    invitationCampaigns.forEach(campaign => {
+        const progress = (campaign.sent_count / campaign.target_count * 100).toFixed(1);
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${campaign.id}</td>
+            <td>${campaign.name}</td>
+            <td>${campaign.chat_link}</td>
+            <td>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar" role="progressbar" style="width: ${progress}%">
+                        ${progress}%
+                    </div>
+                </div>
+                <small class="text-muted">${campaign.sent_count}/${campaign.target_count}</small>
+            </td>
+            <td><span class="badge ${campaign.status === 'running' ? 'bg-warning' : 'bg-success'}">${campaign.status === 'running' ? 'Выполняется' : 'Завершено'}</span></td>
+            <td>${campaign.success_count}</td>
+            <td>${campaign.error_count}</td>
+            <td>${formatDate(campaign.started_at)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-danger" onclick="stopInvitationCampaign(${campaign.id})" title="Остановить">
+                    <i class="fas fa-stop"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function stopInvitationCampaign(campaignId) {
+    if (confirm('Остановить кампанию приглашений?')) {
+        const campaign = invitationCampaigns.find(c => c.id === campaignId);
+        if (campaign) {
+            campaign.status = 'stopped';
+            addInvitationLog(`Кампания "${campaign.name}" остановлена`, 'warning');
+            displayInvitationCampaigns();
+            showNotification('Кампания остановлена', 'warning');
+        }
+    }
+}
+
+function previewInvitation() {
+    const message = document.getElementById('invitationMessage').value;
+    const chatLink = document.getElementById('chatLink').value;
+    
+    if (!message || !chatLink) {
+        showNotification('Заполните сообщение и ссылку на чат', 'warning');
+        return;
+    }
+    
+    document.getElementById('previewText').textContent = message;
+    document.getElementById('previewLink').innerHTML = `<a href="${chatLink}" target="_blank" class="btn btn-primary btn-sm">${chatLink}</a>`;
+    
+    new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+function addInvitationLog(message, type = 'info') {
+    const logsContainer = document.getElementById('invitationLogs');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    
+    let colorClass = '';
+    switch(type) {
+        case 'success': colorClass = 'color: #00ff00;'; break;
+        case 'error': colorClass = 'color: #ff0000;'; break;
+        case 'warning': colorClass = 'color: #ffff00;'; break;
+        default: colorClass = 'color: #00ffff;'; break;
+    }
+    
+    logEntry.innerHTML = `
+        <span style="color: #888;">[${timestamp}]</span> 
+        <span style="${colorClass}">${message}</span>
+    `;
+    
+    logsContainer.insertBefore(logEntry, logsContainer.firstChild);
+    
+    // Ограничиваем количество логов
+    const logs = logsContainer.querySelectorAll('.log-entry');
+    if (logs.length > 200) {
+        logs[logs.length - 1].remove();
+    }
+    
+    // Автоматическая прокрутка вниз
+    logsContainer.scrollTop = 0;
+}
+
+function loadInvitationCampaigns() {
+    displayInvitationCampaigns();
+}
+
+function refreshInvitations() {
+    loadInvitationCampaigns();
+    showNotification('Список кампаний обновлен', 'success');
+}
+
+function clearInvitationLogs() {
+    if (confirm('Очистить все логи приглашений?')) {
+        document.getElementById('invitationLogs').innerHTML = '<div class="log-entry"><span class="text-muted">[14:05:12]</span> Логи очищены</div>';
+        showNotification('Логи очищены', 'success');
+    }
+}
+
+// Обработка изменения источника юзернеймов
+document.getElementById('usernameSource').addEventListener('change', toggleUsernameSource);
+</script>
+{% endblock %}

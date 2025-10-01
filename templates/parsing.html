@@ -1,0 +1,649 @@
+{% extends "base.html" %}
+
+{% block title %}Парсинг - Telegram Mass Platform{% endblock %}
+{% block page_title %}🔍 Парсинг и Сбор Данных{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Левая панель - Создание задачи -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Создать задачу парсинга</h5>
+            </div>
+            <div class="card-body">
+                <form id="parsingForm">
+                    <div class="mb-3">
+                        <label class="form-label">Название задачи:</label>
+                        <input type="text" class="form-control" id="taskName" required placeholder="Например: Парсинг канала @example">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Тип источника:</label>
+                        <select class="form-select" id="sourceType" required onchange="toggleSourceOptions()">
+                            <option value="">Выберите тип</option>
+                            <option value="channel">Канал/Группа</option>
+                            <option value="chat">Чат</option>
+                            <option value="location">Геолокация</option>
+                            <option value="hashtag">Хештег</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Опции для канала/группы -->
+                    <div id="channelOptions" class="source-options" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Ссылка на канал/группу:</label>
+                            <input type="text" class="form-control" id="channelLink" placeholder="@channel_name или https://t.me/channel_name">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Количество участников:</label>
+                            <input type="number" class="form-control" id="maxMembers" placeholder="1000" min="1" max="10000">
+                        </div>
+                    </div>
+                    
+                    <!-- Опции для чата -->
+                    <div id="chatOptions" class="source-options" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Ссылка на чат:</label>
+                            <input type="text" class="form-control" id="chatLink" placeholder="@chat_name или https://t.me/chat_name">
+                        </div>
+                    </div>
+                    
+                    <!-- Опции для геолокации -->
+                    <div id="locationOptions" class="source-options" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Широта:</label>
+                            <input type="number" class="form-control" id="latitude" step="0.000001" placeholder="55.7558">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Долгота:</label>
+                            <input type="number" class="form-control" id="longitude" step="0.000001" placeholder="37.6176">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Радиус (км):</label>
+                            <input type="number" class="form-control" id="radius" placeholder="5" min="1" max="100">
+                        </div>
+                    </div>
+                    
+                    <!-- Опции для хештега -->
+                    <div id="hashtagOptions" class="source-options" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Хештег:</label>
+                            <input type="text" class="form-control" id="hashtag" placeholder="#example">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Количество сообщений:</label>
+                            <input type="number" class="form-control" id="maxMessages" placeholder="100" min="1" max="1000">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Целевая база:</label>
+                        <select class="form-select" id="targetDatabase">
+                            <option value="general">Общая база</option>
+                            <option value="custom">Создать новую</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="customDatabaseName" style="display: none;">
+                        <label class="form-label">Название базы:</label>
+                        <input type="text" class="form-control" id="databaseName" placeholder="Название новой базы">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Задержка между запросами (сек):</label>
+                        <input type="number" class="form-control" id="delay" value="2" min="1" max="60">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-play"></i> Запустить парсинг
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Статистика парсинга -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">Статистика</h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="h4 text-primary" id="totalParsed">0</div>
+                        <small class="text-muted">Всего собрано</small>
+                    </div>
+                    <div class="col-6">
+                        <div class="h4 text-success" id="activeTasks">0</div>
+                        <small class="text-muted">Активных задач</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Правая панель - Список задач -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Задачи парсинга</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshTasks()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="exportResults()">
+                        <i class="fas fa-download"></i> Экспорт
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="parsingTasksTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Тип</th>
+                                <th>Источник</th>
+                                <th>Статус</th>
+                                <th>Результат</th>
+                                <th>Создано</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Данные загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Логи парсинга -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">Логи парсинга</h6>
+            </div>
+            <div class="card-body">
+                <div class="logs-container" id="parsingLogs" style="height: 300px; overflow-y: auto; background: #f8f9fa; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div class="log-entry">
+                        <span class="text-muted">[14:05:12]</span> Система парсинга готова к работе
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно результатов -->
+<div class="modal fade" id="resultsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Результаты парсинга</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-sm" id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Имя</th>
+                                <th>Username</th>
+                                <th>Номер</th>
+                                <th>Статус</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Результаты загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" onclick="exportTaskResults()">Экспортировать</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let parsingTasks = [];
+let currentTaskId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadParsingTasks();
+    loadParsingStats();
+    
+    // Обновление каждые 10 секунд
+    setInterval(loadParsingTasks, 10000);
+    setInterval(loadParsingStats, 30000);
+});
+
+function toggleSourceOptions() {
+    const sourceType = document.getElementById('sourceType').value;
+    
+    // Скрываем все опции
+    document.querySelectorAll('.source-options').forEach(option => {
+        option.style.display = 'none';
+    });
+    
+    // Показываем нужные опции
+    if (sourceType) {
+        const optionsId = sourceType + 'Options';
+        const options = document.getElementById(optionsId);
+        if (options) {
+            options.style.display = 'block';
+        }
+    }
+    
+    // Показываем поле для названия базы если выбрано "Создать новую"
+    const targetDatabase = document.getElementById('targetDatabase').value;
+    const customDatabaseName = document.getElementById('customDatabaseName');
+    if (targetDatabase === 'custom') {
+        customDatabaseName.style.display = 'block';
+    } else {
+        customDatabaseName.style.display = 'none';
+    }
+}
+
+// Обработка формы парсинга
+document.getElementById('parsingForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    if (!validateParsingForm()) {
+        return;
+    }
+    
+    const formData = {
+        name: document.getElementById('taskName').value,
+        source_type: document.getElementById('sourceType').value,
+        target_database: document.getElementById('targetDatabase').value,
+        delay: parseInt(document.getElementById('delay').value)
+    };
+    
+    // Добавляем специфичные данные в зависимости от типа источника
+    const sourceType = formData.source_type;
+    switch(sourceType) {
+        case 'channel':
+            formData.channel_link = document.getElementById('channelLink').value;
+            formData.max_members = parseInt(document.getElementById('maxMembers').value) || 1000;
+            break;
+        case 'chat':
+            formData.chat_link = document.getElementById('chatLink').value;
+            break;
+        case 'location':
+            formData.latitude = parseFloat(document.getElementById('latitude').value);
+            formData.longitude = parseFloat(document.getElementById('longitude').value);
+            formData.radius = parseInt(document.getElementById('radius').value) || 5;
+            break;
+        case 'hashtag':
+            formData.hashtag = document.getElementById('hashtag').value;
+            formData.max_messages = parseInt(document.getElementById('maxMessages').value) || 100;
+            break;
+    }
+    
+    if (formData.target_database === 'custom') {
+        formData.database_name = document.getElementById('databaseName').value;
+    }
+    
+    startParsingTask(formData);
+});
+
+function validateParsingForm() {
+    const taskName = document.getElementById('taskName').value;
+    const sourceType = document.getElementById('sourceType').value;
+    
+    if (!taskName.trim()) {
+        showNotification('Введите название задачи', 'error');
+        return false;
+    }
+    
+    if (!sourceType) {
+        showNotification('Выберите тип источника', 'error');
+        return false;
+    }
+    
+    // Проверяем специфичные поля
+    switch(sourceType) {
+        case 'channel':
+            const channelLink = document.getElementById('channelLink').value;
+            if (!channelLink.trim()) {
+                showNotification('Введите ссылку на канал', 'error');
+                return false;
+            }
+            break;
+        case 'chat':
+            const chatLink = document.getElementById('chatLink').value;
+            if (!chatLink.trim()) {
+                showNotification('Введите ссылку на чат', 'error');
+                return false;
+            }
+            break;
+        case 'location':
+            const latitude = document.getElementById('latitude').value;
+            const longitude = document.getElementById('longitude').value;
+            if (!latitude || !longitude) {
+                showNotification('Введите координаты', 'error');
+                return false;
+            }
+            break;
+        case 'hashtag':
+            const hashtag = document.getElementById('hashtag').value;
+            if (!hashtag.trim()) {
+                showNotification('Введите хештег', 'error');
+                return false;
+            }
+            break;
+    }
+    
+    return true;
+}
+
+function startParsingTask(formData) {
+    showLoadingModal();
+    
+    // Отправляем запрос на парсинг
+    fetch('/api/parse-channel', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            channel_link: formData.channel_link,
+            max_users: formData.max_members
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            const task = {
+                id: Date.now(),
+                name: formData.name,
+                source_type: formData.source_type,
+                source_data: JSON.stringify(formData),
+                status: 'running',
+                results_count: 0,
+                created_at: new Date().toISOString()
+            };
+            
+            parsingTasks.unshift(task);
+            displayParsingTasks();
+            addParsingLog(`Задача "${formData.name}" запущена`, 'info');
+            addParsingLog(`Источник: ${formData.channel_link}`, 'info');
+            addParsingLog(`Максимум участников: ${formData.max_members}`, 'info');
+            
+            // Имитация работы парсинга
+            simulateParsingTask(task.id);
+            
+            showNotification('Парсинг запущен', 'success');
+            
+            // Очищаем форму
+            document.getElementById('parsingForm').reset();
+            toggleSourceOptions();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка запуска парсинга:', error);
+        showNotification('Ошибка запуска парсинга', 'error');
+    });
+}
+
+function simulateParsingTask(taskId) {
+    const task = parsingTasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    let resultsCount = 0;
+    const maxResults = Math.floor(Math.random() * 500) + 100;
+    
+    const interval = setInterval(() => {
+        if (resultsCount >= maxResults) {
+            task.status = 'completed';
+            task.results_count = resultsCount;
+            clearInterval(interval);
+            addParsingLog(`Задача "${task.name}" завершена. Собрано: ${resultsCount} пользователей`, 'success');
+            displayParsingTasks();
+            return;
+        }
+        
+        resultsCount += Math.floor(Math.random() * 10) + 1;
+        task.results_count = resultsCount;
+        
+        addParsingLog(`Задача "${task.name}": собрано ${resultsCount}/${maxResults} пользователей`, 'info');
+        displayParsingTasks();
+    }, 2000);
+}
+
+function loadParsingTasks() {
+    // В реальном приложении здесь был бы API запрос
+    displayParsingTasks();
+}
+
+function displayParsingTasks() {
+    const tbody = document.querySelector('#parsingTasksTable tbody');
+    tbody.innerHTML = '';
+    
+    parsingTasks.forEach(task => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${task.id}</td>
+            <td>${task.name}</td>
+            <td><span class="badge bg-info">${getSourceTypeText(task.source_type)}</span></td>
+            <td>${getSourceData(task)}</td>
+            <td><span class="badge ${getTaskStatusBadge(task.status)}">${getTaskStatusText(task.status)}</span></td>
+            <td>${task.results_count}</td>
+            <td>${formatDate(task.created_at)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="viewTaskResults(${task.id})" title="Просмотр результатов">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="stopTask(${task.id})" title="Остановить">
+                    <i class="fas fa-stop"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="deleteTask(${task.id})" title="Удалить">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function getSourceTypeText(type) {
+    const types = {
+        'channel': 'Канал',
+        'chat': 'Чат',
+        'location': 'Геолокация',
+        'hashtag': 'Хештег'
+    };
+    return types[type] || type;
+}
+
+function getSourceData(task) {
+    try {
+        const data = JSON.parse(task.source_data);
+        switch(task.source_type) {
+            case 'channel':
+                return data.channel_link || '-';
+            case 'chat':
+                return data.chat_link || '-';
+            case 'location':
+                return `${data.latitude}, ${data.longitude}`;
+            case 'hashtag':
+                return data.hashtag || '-';
+            default:
+                return '-';
+        }
+    } catch (e) {
+        return '-';
+    }
+}
+
+function getTaskStatusBadge(status) {
+    const badges = {
+        'pending': 'bg-secondary',
+        'running': 'bg-warning',
+        'completed': 'bg-success',
+        'error': 'bg-danger',
+        'stopped': 'bg-dark'
+    };
+    return badges[status] || 'bg-secondary';
+}
+
+function getTaskStatusText(status) {
+    const texts = {
+        'pending': 'Ожидание',
+        'running': 'Выполняется',
+        'completed': 'Завершено',
+        'error': 'Ошибка',
+        'stopped': 'Остановлено'
+    };
+    return texts[status] || status;
+}
+
+function loadParsingStats() {
+    const totalParsed = parsingTasks.reduce((sum, task) => sum + task.results_count, 0);
+    const activeTasks = parsingTasks.filter(task => task.status === 'running').length;
+    
+    document.getElementById('totalParsed').textContent = totalParsed;
+    document.getElementById('activeTasks').textContent = activeTasks;
+}
+
+function addParsingLog(message, type = 'info') {
+    const logsContainer = document.getElementById('parsingLogs');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    logEntry.innerHTML = `
+        <span class="text-muted">[${timestamp}]</span> 
+        <span class="text-${type === 'error' ? 'danger' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info'}">${message}</span>
+    `;
+    
+    logsContainer.insertBefore(logEntry, logsContainer.firstChild);
+    
+    // Ограничиваем количество логов
+    const logs = logsContainer.querySelectorAll('.log-entry');
+    if (logs.length > 100) {
+        logs[logs.length - 1].remove();
+    }
+}
+
+function viewTaskResults(taskId) {
+    const task = parsingTasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    currentTaskId = taskId;
+    
+    // Имитация загрузки результатов
+    const tbody = document.querySelector('#resultsTable tbody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Загрузка результатов...</td></tr>';
+    
+    new bootstrap.Modal(document.getElementById('resultsModal')).show();
+    
+    // Имитация данных
+    setTimeout(() => {
+        const mockResults = [];
+        for (let i = 1; i <= Math.min(task.results_count, 50); i++) {
+            mockResults.push({
+                id: i,
+                name: `Пользователь ${i}`,
+                username: `user${i}`,
+                phone: `+7${Math.floor(Math.random() * 9000000000) + 1000000000}`,
+                status: Math.random() > 0.1 ? 'active' : 'banned'
+            });
+        }
+        
+        tbody.innerHTML = '';
+        mockResults.forEach(result => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${result.id}</td>
+                <td>${result.name}</td>
+                <td>@${result.username}</td>
+                <td>${result.phone}</td>
+                <td><span class="badge ${result.status === 'active' ? 'bg-success' : 'bg-danger'}">${result.status === 'active' ? 'Активен' : 'Забанен'}</span></td>
+            `;
+            tbody.appendChild(row);
+        });
+    }, 1000);
+}
+
+function stopTask(taskId) {
+    const task = parsingTasks.find(t => t.id === taskId);
+    if (task) {
+        task.status = 'stopped';
+        addParsingLog(`Задача "${task.name}" остановлена`, 'warning');
+        displayParsingTasks();
+        showNotification('Задача остановлена', 'warning');
+    }
+}
+
+function deleteTask(taskId) {
+    if (confirm('Удалить задачу?')) {
+        const taskIndex = parsingTasks.findIndex(t => t.id === taskId);
+        if (taskIndex !== -1) {
+            const task = parsingTasks[taskIndex];
+            parsingTasks.splice(taskIndex, 1);
+            addParsingLog(`Задача "${task.name}" удалена`, 'info');
+            displayParsingTasks();
+            showNotification('Задача удалена', 'success');
+        }
+    }
+}
+
+function refreshTasks() {
+    loadParsingTasks();
+    showNotification('Список задач обновлен', 'success');
+}
+
+function exportResults() {
+    if (parsingTasks.length === 0) {
+        showNotification('Нет задач для экспорта', 'warning');
+        return;
+    }
+    
+    const data = parsingTasks.map(task => ({
+        'ID': task.id,
+        'Название': task.name,
+        'Тип': getSourceTypeText(task.source_type),
+        'Источник': getSourceData(task),
+        'Статус': getTaskStatusText(task.status),
+        'Результат': task.results_count,
+        'Создано': formatDate(task.created_at)
+    }));
+    
+    exportToCSV(data, 'parsing_tasks.csv');
+}
+
+function exportTaskResults() {
+    if (!currentTaskId) return;
+    
+    const task = parsingTasks.find(t => t.id === currentTaskId);
+    if (!task) return;
+    
+    // Имитация экспорта результатов задачи
+    showNotification('Результаты экспортированы', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('resultsModal')).hide();
+}
+
+// Обработка изменения целевой базы
+document.getElementById('targetDatabase').addEventListener('change', function() {
+    const customDatabaseName = document.getElementById('customDatabaseName');
+    if (this.value === 'custom') {
+        customDatabaseName.style.display = 'block';
+    } else {
+        customDatabaseName.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

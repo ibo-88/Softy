@@ -1,0 +1,1066 @@
+{% extends "base.html" %}
+
+{% block title %}Рассылки - Telegram Mass Platform{% endblock %}
+{% block page_title %}✉️ Рассылки и Кампании{% endblock %}
+
+{% block content %}
+<!-- Панель создания рассылки -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Создать рассылку</h5>
+            </div>
+            <div class="card-body">
+                <form id="campaignForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Название кампании:</label>
+                                <input type="text" class="form-control" id="campaignName" required placeholder="Название рассылки">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">База получателей:</label>
+                                <select class="form-select" id="targetDatabase" required>
+                                    <option value="">Выберите базу</option>
+                                    <option value="general">Общая база</option>
+                                    <option value="parsing_1">Парсинг канала @example</option>
+                                    <option value="parsing_2">Парсинг чата @test</option>
+                                    <option value="custom">Загрузить файл</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3" id="fileUploadSection" style="display: none;">
+                                <label class="form-label">Файл с юзернеймами:</label>
+                                <input type="file" class="form-control" id="usernamesFile" accept=".txt,.csv">
+                                <div class="form-text">Формат: один юзернейм на строку (@username или username)</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Количество получателей:</label>
+                                <input type="number" class="form-control" id="recipientCount" readonly placeholder="Будет определено автоматически">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Задержка между сообщениями (сек):</label>
+                                <input type="number" class="form-control" id="messageDelay" value="3" min="1" max="300">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Задержка между аккаунтами (сек):</label>
+                                <input type="number" class="form-control" id="accountDelay" value="10" min="1" max="600">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Максимум сообщений на аккаунт:</label>
+                                <input type="number" class="form-control" id="maxMessagesPerAccount" value="50" min="1" max="1000">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useBlacklist" checked>
+                                    <label class="form-check-label" for="useBlacklist">
+                                        Использовать Blacklist
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Сообщение:</label>
+                        <textarea class="form-control" id="messageText" rows="6" required placeholder="Введите текст сообщения..."></textarea>
+                        <div class="form-text">Максимум 4096 символов</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Медиа файл (опционально):</label>
+                        <input type="file" class="form-control" id="mediaFile" accept="image/*,video/*,audio/*,.pdf,.doc,.docx">
+                        <div class="form-text">Поддерживаются: изображения, видео, аудио, документы</div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-primary" onclick="previewMessage()">
+                            <i class="fas fa-eye"></i> Предварительный просмотр
+                        </button>
+                        <div>
+                            <button type="button" class="btn btn-warning me-2" onclick="showScheduleModal()">
+                                <i class="fas fa-clock"></i> Запланировать
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Запустить рассылку
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Активные рассылки -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Активные рассылки</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshCampaigns()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="activeCampaignsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>База</th>
+                                <th>Прогресс</th>
+                                <th>Статус</th>
+                                <th>Скорость</th>
+                                <th>Запущено</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Данные загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Запланированные кампании -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">⏰ Запланированные кампании</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadScheduledCampaigns()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="scheduledCampaigns">
+                    <p class="text-muted">Загрузка запланированных кампаний...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- История рассылок -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">История рассылок</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-success" onclick="exportCampaigns()">
+                        <i class="fas fa-download"></i> Экспорт
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="campaignsHistoryTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>База</th>
+                                <th>Отправлено</th>
+                                <th>Успешно</th>
+                                <th>Ошибки</th>
+                                <th>Статус</th>
+                                <th>Завершено</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Данные загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Логи рассылки -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Логи рассылки</h6>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">
+                        <i class="fas fa-trash"></i> Очистить
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="exportLogs()">
+                        <i class="fas fa-download"></i> Экспорт логов
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="logs-container" id="campaignLogs" style="height: 400px; overflow-y: auto; background: #1e1e1e; color: #00ff00; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div class="log-entry">
+                        <span class="text-muted">[14:05:12]</span> Система рассылок готова к работе
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно предварительного просмотра -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Предварительный просмотр сообщения</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-message">
+                    <div class="message-bubble">
+                        <div id="previewText"></div>
+                        <div id="previewMedia" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно планирования кампании -->
+<div class="modal fade" id="scheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Планирование кампании</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="scheduleForm">
+                    <div class="mb-3">
+                        <label class="form-label">Дата и время:</label>
+                        <input type="datetime-local" class="form-control" id="scheduleTime" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Часовой пояс:</label>
+                        <select class="form-select" id="timezone">
+                            <option value="UTC">UTC</option>
+                            <option value="Europe/Moscow">Москва (UTC+3)</option>
+                            <option value="Europe/Kiev">Киев (UTC+2)</option>
+                            <option value="America/New_York">Нью-Йорк (UTC-5)</option>
+                            <option value="Asia/Tokyo">Токио (UTC+9)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Повторение:</label>
+                        <select class="form-select" id="repeatType" onchange="toggleRepeatOptions()">
+                            <option value="once">Однократно</option>
+                            <option value="daily">Ежедневно</option>
+                            <option value="weekly">Еженедельно</option>
+                            <option value="monthly">Ежемесячно</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="repeatInterval" style="display: none;">
+                        <label class="form-label">Интервал:</label>
+                        <input type="number" class="form-control" id="interval" value="1" min="1">
+                        <div class="form-text">Например: каждые 2 дня, каждые 3 недели</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="scheduleCampaign()">Запланировать</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно статистики кампании -->
+<div class="modal fade" id="campaignStatsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Статистика кампании</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <canvas id="campaignChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="stats-details" id="statsDetails">
+                            <!-- Статистика загружается через JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let campaigns = [];
+let activeCampaigns = [];
+let campaignLogs = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCampaigns();
+    loadActiveCampaigns();
+    
+    // Обновление каждые 5 секунд
+    setInterval(loadActiveCampaigns, 5000);
+    setInterval(updateCampaignLogs, 2000);
+});
+
+// Обработка формы рассылки
+document.getElementById('campaignForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    if (!validateCampaignForm()) {
+        return;
+    }
+    
+    const formData = {
+        name: document.getElementById('campaignName').value,
+        target_database: document.getElementById('targetDatabase').value,
+        message: document.getElementById('messageText').value,
+        message_delay: parseInt(document.getElementById('messageDelay').value),
+        account_delay: parseInt(document.getElementById('accountDelay').value),
+        max_messages_per_account: parseInt(document.getElementById('maxMessagesPerAccount').value),
+        use_blacklist: document.getElementById('useBlacklist').checked
+    };
+    
+    startCampaign(formData);
+});
+
+// Обработка изменения базы получателей
+document.getElementById('targetDatabase').addEventListener('change', function() {
+    const fileUploadSection = document.getElementById('fileUploadSection');
+    if (this.value === 'custom') {
+        fileUploadSection.style.display = 'block';
+    } else {
+        fileUploadSection.style.display = 'none';
+    }
+    
+    updateRecipientCount();
+});
+
+function validateCampaignForm() {
+    const campaignName = document.getElementById('campaignName').value;
+    const targetDatabase = document.getElementById('targetDatabase').value;
+    const messageText = document.getElementById('messageText').value;
+    
+    if (!campaignName.trim()) {
+        showNotification('Введите название кампании', 'error');
+        return false;
+    }
+    
+    if (!targetDatabase) {
+        showNotification('Выберите базу получателей', 'error');
+        return false;
+    }
+    
+    if (!messageText.trim()) {
+        showNotification('Введите текст сообщения', 'error');
+        return false;
+    }
+    
+    if (messageText.length > 4096) {
+        showNotification('Сообщение слишком длинное (максимум 4096 символов)', 'error');
+        return false;
+    }
+    
+    return true;
+}
+
+function startCampaign(formData) {
+    showLoadingModal();
+    
+    // Если выбран файл, сначала загружаем его
+    if (formData.target_database === 'custom') {
+        const fileInput = document.getElementById('usernamesFile');
+        if (!fileInput.files[0]) {
+            hideLoadingModal();
+            showNotification('Выберите файл с юзернеймами', 'error');
+            return;
+        }
+        
+        uploadUsernamesFile(fileInput.files[0], formData);
+    } else {
+        // Запускаем кампанию с базой данных
+        launchSpamCampaign(formData, null);
+    }
+}
+
+function uploadUsernamesFile(file, formData) {
+    const formDataUpload = new FormData();
+    formDataUpload.append('file', file);
+    
+    fetch('/api/upload-usernames', {
+        method: 'POST',
+        body: formDataUpload
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            formData.usernames_file = data.filepath;
+            launchSpamCampaign(formData, data.count);
+        } else {
+            hideLoadingModal();
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка загрузки файла:', error);
+        showNotification('Ошибка загрузки файла', 'error');
+    });
+}
+
+function launchSpamCampaign(formData, usernamesCount) {
+    // Отправляем данные на сервер для запуска спам-кампании
+    fetch('/api/start-spam', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            const campaign = {
+                id: Date.now(),
+                name: formData.name,
+                target_database: formData.target_database,
+                message: formData.message,
+                target_count: usernamesCount || Math.floor(Math.random() * 5000) + 1000,
+                sent_count: 0,
+                success_count: 0,
+                error_count: 0,
+                status: 'running',
+                created_at: new Date().toISOString(),
+                started_at: new Date().toISOString()
+            };
+            
+            activeCampaigns.push(campaign);
+            campaigns.unshift(campaign);
+            
+            displayActiveCampaigns();
+            displayCampaignsHistory();
+            
+            addCampaignLog(`Спам-кампания "${formData.name}" запущена`, 'info');
+            addCampaignLog(`Источник: ${formData.target_database}`, 'info');
+            addCampaignLog(`Юзернеймов: ${campaign.target_count}`, 'info');
+            
+            // Имитация работы рассылки
+            simulateCampaign(campaign.id);
+            
+            showNotification('Спам-кампания запущена', 'success');
+            
+            // Очищаем форму
+            document.getElementById('campaignForm').reset();
+            document.getElementById('fileUploadSection').style.display = 'none';
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка запуска кампании:', error);
+        showNotification('Ошибка запуска кампании', 'error');
+    });
+}
+
+function simulateCampaign(campaignId) {
+    const campaign = activeCampaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+    
+    const interval = setInterval(() => {
+        if (campaign.sent_count >= campaign.target_count) {
+            campaign.status = 'completed';
+            campaign.completed_at = new Date().toISOString();
+            
+            // Перемещаем в историю
+            const index = activeCampaigns.findIndex(c => c.id === campaignId);
+            if (index !== -1) {
+                activeCampaigns.splice(index, 1);
+            }
+            
+            addCampaignLog(`Кампания "${campaign.name}" завершена`, 'success');
+            addCampaignLog(`Итого отправлено: ${campaign.sent_count}`, 'success');
+            addCampaignLog(`Успешно: ${campaign.success_count}`, 'success');
+            addCampaignLog(`Ошибок: ${campaign.error_count}`, 'success');
+            
+            clearInterval(interval);
+            displayActiveCampaigns();
+            displayCampaignsHistory();
+            return;
+        }
+        
+        // Имитация отправки сообщений
+        const batchSize = Math.floor(Math.random() * 10) + 1;
+        const successRate = 0.85; // 85% успешных отправок
+        
+        for (let i = 0; i < batchSize && campaign.sent_count < campaign.target_count; i++) {
+            campaign.sent_count++;
+            
+            if (Math.random() < successRate) {
+                campaign.success_count++;
+                addCampaignLog(`Аккаунт "Account_${Math.floor(Math.random() * 100) + 1}": Успешно отправлено сообщение пользователю "@user_${campaign.sent_count}". Осталось: ${campaign.target_count - campaign.sent_count}/${campaign.target_count}`, 'success');
+            } else {
+                campaign.error_count++;
+                const errorTypes = ['FLOOD_WAIT', 'USER_BANNED', 'CHAT_FORBIDDEN', 'PEER_ID_INVALID'];
+                const errorType = errorTypes[Math.floor(Math.random() * errorTypes.length)];
+                addCampaignLog(`Аккаунт "Account_${Math.floor(Math.random() * 100) + 1}": Ошибка "${errorType}"`, 'error');
+                
+                if (errorType === 'FLOOD_WAIT') {
+                    addCampaignLog(`Ожидание 60 сек...`, 'warning');
+                }
+            }
+        }
+        
+        displayActiveCampaigns();
+    }, 3000);
+}
+
+function loadCampaigns() {
+    // В реальном приложении здесь был бы API запрос
+    displayCampaignsHistory();
+}
+
+function loadActiveCampaigns() {
+    displayActiveCampaigns();
+}
+
+function displayActiveCampaigns() {
+    const tbody = document.querySelector('#activeCampaignsTable tbody');
+    tbody.innerHTML = '';
+    
+    activeCampaigns.forEach(campaign => {
+        const progress = (campaign.sent_count / campaign.target_count * 100).toFixed(1);
+        const speed = Math.floor(Math.random() * 20) + 5; // сообщений в минуту
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${campaign.id}</td>
+            <td>${campaign.name}</td>
+            <td>${campaign.target_database}</td>
+            <td>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar" role="progressbar" style="width: ${progress}%">
+                        ${progress}%
+                    </div>
+                </div>
+                <small class="text-muted">${campaign.sent_count}/${campaign.target_count}</small>
+            </td>
+            <td><span class="badge bg-warning">Выполняется</span></td>
+            <td>${speed} сообщ/мин</td>
+            <td>${formatDate(campaign.started_at)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="viewCampaignStats(${campaign.id})" title="Статистика">
+                    <i class="fas fa-chart-bar"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-warning" onclick="pauseCampaign(${campaign.id})" title="Пауза">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="stopCampaign(${campaign.id})" title="Остановить">
+                    <i class="fas fa-stop"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function displayCampaignsHistory() {
+    const tbody = document.querySelector('#campaignsHistoryTable tbody');
+    tbody.innerHTML = '';
+    
+    campaigns.filter(c => c.status === 'completed' || c.status === 'stopped').forEach(campaign => {
+        const successRate = campaign.sent_count > 0 ? (campaign.success_count / campaign.sent_count * 100).toFixed(1) : 0;
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${campaign.id}</td>
+            <td>${campaign.name}</td>
+            <td>${campaign.target_database}</td>
+            <td>${campaign.sent_count}</td>
+            <td>${campaign.success_count} (${successRate}%)</td>
+            <td>${campaign.error_count}</td>
+            <td><span class="badge ${campaign.status === 'completed' ? 'bg-success' : 'bg-danger'}">${campaign.status === 'completed' ? 'Завершено' : 'Остановлено'}</span></td>
+            <td>${formatDate(campaign.completed_at || campaign.started_at)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="viewCampaignStats(${campaign.id})" title="Статистика">
+                    <i class="fas fa-chart-bar"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-success" onclick="duplicateCampaign(${campaign.id})" title="Дублировать">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function addCampaignLog(message, type = 'info') {
+    const logsContainer = document.getElementById('campaignLogs');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    
+    let colorClass = '';
+    switch(type) {
+        case 'success': colorClass = 'color: #00ff00;'; break;
+        case 'error': colorClass = 'color: #ff0000;'; break;
+        case 'warning': colorClass = 'color: #ffff00;'; break;
+        default: colorClass = 'color: #00ffff;'; break;
+    }
+    
+    logEntry.innerHTML = `
+        <span style="color: #888;">[${timestamp}]</span> 
+        <span style="${colorClass}">${message}</span>
+    `;
+    
+    logsContainer.insertBefore(logEntry, logsContainer.firstChild);
+    
+    // Ограничиваем количество логов
+    const logs = logsContainer.querySelectorAll('.log-entry');
+    if (logs.length > 200) {
+        logs[logs.length - 1].remove();
+    }
+    
+    // Автоматическая прокрутка вниз
+    logsContainer.scrollTop = 0;
+}
+
+function previewMessage() {
+    const messageText = document.getElementById('messageText').value;
+    const mediaFile = document.getElementById('mediaFile').files[0];
+    
+    if (!messageText.trim()) {
+        showNotification('Введите текст сообщения для предварительного просмотра', 'warning');
+        return;
+    }
+    
+    document.getElementById('previewText').textContent = messageText;
+    
+    const previewMedia = document.getElementById('previewMedia');
+    previewMedia.innerHTML = '';
+    
+    if (mediaFile) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (mediaFile.type.startsWith('image/')) {
+                previewMedia.innerHTML = `<img src="${e.target.result}" class="img-fluid" style="max-width: 200px;">`;
+            } else {
+                previewMedia.innerHTML = `<div class="alert alert-info">Файл: ${mediaFile.name}</div>`;
+            }
+        };
+        reader.readAsDataURL(mediaFile);
+    }
+    
+    new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+function viewCampaignStats(campaignId) {
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+    
+    // Заполняем статистику
+    const statsDetails = document.getElementById('statsDetails');
+    statsDetails.innerHTML = `
+        <h6>Детальная статистика</h6>
+        <div class="mb-2">
+            <strong>Название:</strong> ${campaign.name}
+        </div>
+        <div class="mb-2">
+            <strong>База:</strong> ${campaign.target_database}
+        </div>
+        <div class="mb-2">
+            <strong>Целевое количество:</strong> ${campaign.target_count}
+        </div>
+        <div class="mb-2">
+            <strong>Отправлено:</strong> ${campaign.sent_count}
+        </div>
+        <div class="mb-2">
+            <strong>Успешно:</strong> ${campaign.success_count}
+        </div>
+        <div class="mb-2">
+            <strong>Ошибок:</strong> ${campaign.error_count}
+        </div>
+        <div class="mb-2">
+            <strong>Процент успеха:</strong> ${campaign.sent_count > 0 ? (campaign.success_count / campaign.sent_count * 100).toFixed(1) : 0}%
+        </div>
+        <div class="mb-2">
+            <strong>Запущено:</strong> ${formatDate(campaign.started_at)}
+        </div>
+        ${campaign.completed_at ? `<div class="mb-2"><strong>Завершено:</strong> ${formatDate(campaign.completed_at)}</div>` : ''}
+    `;
+    
+    // Создаем график
+    const ctx = document.getElementById('campaignChart').getContext('2d');
+    if (window.campaignChart) {
+        window.campaignChart.destroy();
+    }
+    
+    window.campaignChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Успешно', 'Ошибки'],
+            datasets: [{
+                data: [campaign.success_count, campaign.error_count],
+                backgroundColor: ['#28a745', '#dc3545'],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+    
+    new bootstrap.Modal(document.getElementById('campaignStatsModal')).show();
+}
+
+function pauseCampaign(campaignId) {
+    const campaign = activeCampaigns.find(c => c.id === campaignId);
+    if (campaign) {
+        campaign.status = 'paused';
+        addCampaignLog(`Кампания "${campaign.name}" приостановлена`, 'warning');
+        showNotification('Кампания приостановлена', 'warning');
+    }
+}
+
+function stopCampaign(campaignId) {
+    if (confirm('Остановить кампанию?')) {
+        const campaign = activeCampaigns.find(c => c.id === campaignId);
+        if (campaign) {
+            campaign.status = 'stopped';
+            campaign.completed_at = new Date().toISOString();
+            
+            // Перемещаем в историю
+            const index = activeCampaigns.findIndex(c => c.id === campaignId);
+            if (index !== -1) {
+                activeCampaigns.splice(index, 1);
+            }
+            
+            addCampaignLog(`Кампания "${campaign.name}" остановлена`, 'error');
+            displayActiveCampaigns();
+            displayCampaignsHistory();
+            showNotification('Кампания остановлена', 'error');
+        }
+    }
+}
+
+function duplicateCampaign(campaignId) {
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (campaign) {
+        // Заполняем форму данными кампании
+        document.getElementById('campaignName').value = campaign.name + ' (копия)';
+        document.getElementById('targetDatabase').value = campaign.target_database;
+        document.getElementById('messageText').value = campaign.message;
+        
+        showNotification('Данные кампании загружены в форму', 'success');
+    }
+}
+
+function refreshCampaigns() {
+    loadCampaigns();
+    loadActiveCampaigns();
+    showNotification('Список кампаний обновлен', 'success');
+}
+
+function exportCampaigns() {
+    if (campaigns.length === 0) {
+        showNotification('Нет кампаний для экспорта', 'warning');
+        return;
+    }
+    
+    const data = campaigns.map(campaign => ({
+        'ID': campaign.id,
+        'Название': campaign.name,
+        'База': campaign.target_database,
+        'Целевое количество': campaign.target_count,
+        'Отправлено': campaign.sent_count,
+        'Успешно': campaign.success_count,
+        'Ошибок': campaign.error_count,
+        'Статус': campaign.status === 'completed' ? 'Завершено' : campaign.status === 'stopped' ? 'Остановлено' : 'Выполняется',
+        'Запущено': formatDate(campaign.started_at),
+        'Завершено': campaign.completed_at ? formatDate(campaign.completed_at) : '-'
+    }));
+    
+    exportToCSV(data, 'campaigns.csv');
+}
+
+function clearLogs() {
+    if (confirm('Очистить все логи?')) {
+        document.getElementById('campaignLogs').innerHTML = '<div class="log-entry"><span class="text-muted">[14:05:12]</span> Логи очищены</div>';
+        showNotification('Логи очищены', 'success');
+    }
+}
+
+function exportLogs() {
+    const logsContainer = document.getElementById('campaignLogs');
+    const logs = Array.from(logsContainer.querySelectorAll('.log-entry')).map(entry => entry.textContent).join('\n');
+    
+    if (logs.trim()) {
+        downloadFile(logs, 'campaign_logs.txt', 'text/plain');
+        showNotification('Логи экспортированы', 'success');
+    } else {
+        showNotification('Нет логов для экспорта', 'warning');
+    }
+}
+
+function updateRecipientCount() {
+    const targetDatabase = document.getElementById('targetDatabase').value;
+    const recipientCount = document.getElementById('recipientCount');
+    
+    // Имитация подсчета получателей
+    const counts = {
+        'general': 15420,
+        'parsing_1': 3240,
+        'parsing_2': 1870,
+        'custom': 0
+    };
+    
+    recipientCount.value = counts[targetDatabase] || 0;
+}
+
+function updateCampaignLogs() {
+    // Обновление логов в реальном времени
+    // В реальном приложении здесь был бы WebSocket или периодический запрос
+}
+
+// Функции для планировщика
+function showScheduleModal() {
+    // Проверяем, что форма заполнена
+    const campaignName = document.getElementById('campaignName').value;
+    const message = document.getElementById('message').value;
+    
+    if (!campaignName || !message) {
+        showNotification('Заполните название кампании и сообщение', 'error');
+        return;
+    }
+    
+    new bootstrap.Modal(document.getElementById('scheduleModal')).show();
+}
+
+function scheduleCampaign() {
+    const campaignName = document.getElementById('campaignName').value;
+    const message = document.getElementById('message').value;
+    const targetDatabase = document.getElementById('targetDatabase').value;
+    const recipientCount = document.getElementById('recipientCount').value;
+    const messageDelay = document.getElementById('messageDelay').value;
+    
+    const scheduleData = {
+        campaign_name: campaignName,
+        message: message,
+        target_database: targetDatabase,
+        recipient_count: parseInt(recipientCount),
+        message_delay: parseInt(messageDelay),
+        schedule_time: document.getElementById('scheduleTime').value,
+        timezone: document.getElementById('timezone').value,
+        repeat_type: document.getElementById('repeatType').value,
+        repeat_interval: parseInt(document.getElementById('interval').value) || 1
+    };
+    
+    // Сначала создаем кампанию
+    fetch('/api/start-spam', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(scheduleData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Затем планируем её
+            const scheduleRequest = {
+                campaign_id: data.campaign_id,
+                schedule_time: scheduleData.schedule_time,
+                timezone: scheduleData.timezone,
+                repeat_type: scheduleData.repeat_type,
+                repeat_interval: scheduleData.repeat_interval
+            };
+            
+            return fetch('/api/schedule-campaign', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+        } else {
+            throw new Error(data.error);
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Кампания запланирована успешно', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('scheduleModal')).hide();
+            loadScheduledCampaigns();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка планирования:', error);
+        showNotification('Ошибка планирования кампании', 'error');
+    });
+}
+
+function loadScheduledCampaigns() {
+    fetch('/api/scheduled-campaigns')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displayScheduledCampaigns(data.campaigns);
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка загрузки запланированных кампаний:', error);
+    });
+}
+
+function displayScheduledCampaigns(campaigns) {
+    const container = document.getElementById('scheduledCampaigns');
+    if (!container) return;
+    
+    if (campaigns.length === 0) {
+        container.innerHTML = '<p class="text-muted">Нет запланированных кампаний</p>';
+        return;
+    }
+    
+    let html = '';
+    campaigns.forEach(campaign => {
+        const statusBadge = getStatusBadge(campaign.status);
+        const scheduleTime = new Date(campaign.schedule_time).toLocaleString('ru-RU');
+        
+        html += `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="card-title">${campaign.name}</h6>
+                            <p class="card-text text-muted mb-1">
+                                <i class="fas fa-clock"></i> ${scheduleTime} (${campaign.timezone})
+                            </p>
+                            <p class="card-text text-muted mb-1">
+                                <i class="fas fa-repeat"></i> ${getRepeatTypeText(campaign.repeat_type)}
+                            </p>
+                            <span class="badge ${statusBadge.class}">${statusBadge.text}</span>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="cancelScheduledCampaign(${campaign.id})">
+                                <i class="fas fa-times"></i> Отменить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'scheduled': { class: 'bg-warning', text: 'Запланировано' },
+        'running': { class: 'bg-primary', text: 'Выполняется' },
+        'completed': { class: 'bg-success', text: 'Завершено' },
+        'failed': { class: 'bg-danger', text: 'Ошибка' },
+        'cancelled': { class: 'bg-secondary', text: 'Отменено' }
+    };
+    return badges[status] || { class: 'bg-secondary', text: status };
+}
+
+function getRepeatTypeText(repeatType) {
+    const types = {
+        'once': 'Однократно',
+        'daily': 'Ежедневно',
+        'weekly': 'Еженедельно',
+        'monthly': 'Ежемесячно'
+    };
+    return types[repeatType] || repeatType;
+}
+
+function cancelScheduledCampaign(scheduledId) {
+    if (!confirm('Вы уверены, что хотите отменить эту кампанию?')) {
+        return;
+    }
+    
+    fetch(`/api/cancel-scheduled/${scheduledId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Кампания отменена', 'success');
+            loadScheduledCampaigns();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка отмены кампании:', error);
+        showNotification('Ошибка отмены кампании', 'error');
+    });
+}
+
+function toggleRepeatOptions() {
+    const repeatType = document.getElementById('repeatType').value;
+    const intervalDiv = document.getElementById('repeatInterval');
+    
+    if (repeatType === 'once') {
+        intervalDiv.style.display = 'none';
+    } else {
+        intervalDiv.style.display = 'block';
+    }
+}
+
+// Загружаем запланированные кампании при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadScheduledCampaigns();
+});
+</script>
+{% endblock %}

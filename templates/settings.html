@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки - Telegram Mass Platform{% endblock %}
+{% block page_title %}⚙️ Настройки{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Левая панель - Навигация по настройкам -->
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Разделы настроек</h6>
+            </div>
+            <div class="list-group list-group-flush">
+                <a href="#proxy-settings" class="list-group-item list-group-item-action active" onclick="showSettingsSection('proxy-settings')">
+                    <i class="fas fa-globe"></i> Прокси
+                </a>
+                <a href="#telegram-settings" class="list-group-item list-group-item-action" onclick="showSettingsSection('telegram-settings')">
+                    <i class="fab fa-telegram"></i> Telegram API
+                </a>
+                <a href="#logging-settings" class="list-group-item list-group-item-action" onclick="showSettingsSection('logging-settings')">
+                    <i class="fas fa-file-alt"></i> Логирование
+                </a>
+                <a href="#api-keys" class="list-group-item list-group-item-action" onclick="showSettingsSection('api-keys')">
+                    <i class="fas fa-key"></i> API Ключи
+                </a>
+                <a href="#security-settings" class="list-group-item list-group-item-action" onclick="showSettingsSection('security-settings')">
+                    <i class="fas fa-shield-alt"></i> Безопасность
+                </a>
+                <a href="#performance-settings" class="list-group-item list-group-item-action" onclick="showSettingsSection('performance-settings')">
+                    <i class="fas fa-tachometer-alt"></i> Производительность
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Правая панель - Содержимое настроек -->
+    <div class="col-md-9">
+        <!-- Настройки прокси -->
+        <div id="proxy-settings" class="settings-section">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Настройки прокси</h5>
+                </div>
+                <div class="card-body">
+                    <form id="proxySettingsForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Тип прокси по умолчанию:</label>
+                                    <select class="form-select" id="defaultProxyType">
+                                        <option value="http">HTTP</option>
+                                        <option value="socks5">SOCKS5</option>
+                                        <option value="socks4">SOCKS4</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Таймаут подключения (сек):</label>
+                                    <input type="number" class="form-control" id="proxyTimeout" value="30" min="5" max="300">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Максимум попыток подключения:</label>
+                                    <input type="number" class="form-control" id="proxyMaxRetries" value="3" min="1" max="10">
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Автоматическая ротация прокси:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="autoRotateProxies" checked>
+                                        <label class="form-check-label" for="autoRotateProxies">
+                                            Включить автоматическую ротацию
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Интервал ротации (мин):</label>
+                                    <input type="number" class="form-control" id="rotationInterval" value="60" min="10" max="1440">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Проверка работоспособности:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="proxyHealthCheck" checked>
+                                        <label class="form-check-label" for="proxyHealthCheck">
+                                            Проверять прокси перед использованием
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Сохранить настройки прокси
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Настройки Telegram API -->
+        <div id="telegram-settings" class="settings-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Настройки Telegram API</h5>
+                </div>
+                <div class="card-body">
+                    <form id="telegramSettingsForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">API ID:</label>
+                                    <input type="number" class="form-control" id="apiId" placeholder="12345678">
+                                    <div class="form-text">Получите на <a href="https://my.telegram.org" target="_blank">my.telegram.org</a></div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">API Hash:</label>
+                                    <input type="text" class="form-control" id="apiHash" placeholder="your_api_hash_here">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Таймаут запросов (сек):</label>
+                                    <input type="number" class="form-control" id="requestTimeout" value="30" min="5" max="300">
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Максимум одновременных подключений:</label>
+                                    <input type="number" class="form-control" id="maxConnections" value="100" min="10" max="1000">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Задержка между запросами (мс):</label>
+                                    <input type="number" class="form-control" id="requestDelay" value="100" min="10" max="5000">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Автоматическое переподключение:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="autoReconnect" checked>
+                                        <label class="form-check-label" for="autoReconnect">
+                                            Включить автоматическое переподключение
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Сохранить настройки Telegram
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Настройки логирования -->
+        <div id="logging-settings" class="settings-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Настройки логирования</h5>
+                </div>
+                <div class="card-body">
+                    <form id="loggingSettingsForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Уровень логирования:</label>
+                                    <select class="form-select" id="logLevel">
+                                        <option value="DEBUG">DEBUG</option>
+                                        <option value="INFO" selected>INFO</option>
+                                        <option value="WARNING">WARNING</option>
+                                        <option value="ERROR">ERROR</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Максимальный размер файла лога (МБ):</label>
+                                    <input type="number" class="form-control" id="maxLogSize" value="100" min="10" max="1000">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Количество файлов логов:</label>
+                                    <input type="number" class="form-control" id="logFileCount" value="5" min="1" max="20">
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Логировать в файл:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="logToFile" checked>
+                                        <label class="form-check-label" for="logToFile">
+                                            Сохранять логи в файл
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Логировать в консоль:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="logToConsole" checked>
+                                        <label class="form-check-label" for="logToConsole">
+                                            Выводить логи в консоль
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Формат логов:</label>
+                                    <select class="form-select" id="logFormat">
+                                        <option value="simple">Простой</option>
+                                        <option value="detailed" selected>Подробный</option>
+                                        <option value="json">JSON</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Сохранить настройки логирования
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- API Ключи -->
+        <div id="api-keys" class="settings-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">API Ключи</h5>
+                </div>
+                <div class="card-body">
+                    <form id="apiKeysForm">
+                        <div class="mb-4">
+                            <h6>Good Proxy API</h6>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="mb-3">
+                                        <label class="form-label">API ключ:</label>
+                                        <input type="password" class="form-control" id="goodProxyApiKey" placeholder="Введите API ключ good proxy">
+                                        <div class="form-text">Ключ для автоматического получения прокси</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <button type="button" class="btn btn-outline-primary w-100" onclick="testGoodProxyConnection()">
+                                            <i class="fas fa-plug"></i> Тест подключения
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h6>Другие API</h6>
+                            <div class="mb-3">
+                                <label class="form-label">Proxy API 2:</label>
+                                <input type="password" class="form-control" id="proxyApi2Key" placeholder="API ключ для второго провайдера прокси">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">SMS API:</label>
+                                <input type="password" class="form-control" id="smsApiKey" placeholder="API ключ для SMS сервиса">
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Сохранить API ключи
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Настройки безопасности -->
+        <div id="security-settings" class="settings-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Настройки безопасности</h5>
+                </div>
+                <div class="card-body">
+                    <form id="securitySettingsForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Автоматическое добавление в Blacklist:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="autoBlacklist" checked>
+                                        <label class="form-check-label" for="autoBlacklist">
+                                            Автоматически добавлять заблокированных пользователей
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Максимум ошибок на аккаунт:</label>
+                                    <input type="number" class="form-control" id="maxErrorsPerAccount" value="10" min="1" max="100">
+                                    <div class="form-text">После превышения аккаунт будет приостановлен</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Время блокировки аккаунта (мин):</label>
+                                    <input type="number" class="form-control" id="accountBlockTime" value="60" min="5" max="1440">
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Проверка на спам:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="spamCheck" checked>
+                                        <label class="form-check-label" for="spamCheck">
+                                            Проверять сообщения на спам
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Лимит сообщений в час:</label>
+                                    <input type="number" class="form-control" id="messagesPerHour" value="100" min="10" max="1000">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Использовать случайные задержки:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="randomDelays" checked>
+                                        <label class="form-check-label" for="randomDelays">
+                                            Добавлять случайные задержки между действиями
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Сохранить настройки безопасности
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Настройки производительности -->
+        <div id="performance-settings" class="settings-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Настройки производительности</h5>
+                </div>
+                <div class="card-body">
+                    <form id="performanceSettingsForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Количество потоков для рассылки:</label>
+                                    <input type="number" class="form-control" id="threadCount" value="10" min="1" max="100">
+                                    <div class="form-text">Больше потоков = быстрее, но больше нагрузка</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Размер пула аккаунтов:</label>
+                                    <input type="number" class="form-control" id="accountPoolSize" value="50" min="10" max="500">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Интервал очистки кэша (мин):</label>
+                                    <input type="number" class="form-control" id="cacheCleanupInterval" value="30" min="5" max="1440">
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Максимальное использование памяти (МБ):</label>
+                                    <input type="number" class="form-control" id="maxMemoryUsage" value="1024" min="256" max="8192">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Автоматическая оптимизация:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="autoOptimization" checked>
+                                        <label class="form-check-label" for="autoOptimization">
+                                            Включить автоматическую оптимизацию
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Мониторинг производительности:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="performanceMonitoring" checked>
+                                        <label class="form-check-label" for="performanceMonitoring">
+                                            Включить мониторинг производительности
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Сохранить настройки производительности
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadSettings();
+    
+    // Обработчики форм
+    document.getElementById('proxySettingsForm').addEventListener('submit', saveProxySettings);
+    document.getElementById('telegramSettingsForm').addEventListener('submit', saveTelegramSettings);
+    document.getElementById('loggingSettingsForm').addEventListener('submit', saveLoggingSettings);
+    document.getElementById('apiKeysForm').addEventListener('submit', saveApiKeys);
+    document.getElementById('securitySettingsForm').addEventListener('submit', saveSecuritySettings);
+    document.getElementById('performanceSettingsForm').addEventListener('submit', savePerformanceSettings);
+});
+
+function showSettingsSection(sectionId) {
+    // Скрываем все секции
+    document.querySelectorAll('.settings-section').forEach(section => {
+        section.style.display = 'none';
+    });
+    
+    // Убираем активный класс со всех ссылок
+    document.querySelectorAll('.list-group-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Показываем выбранную секцию
+    document.getElementById(sectionId).style.display = 'block';
+    
+    // Добавляем активный класс к выбранной ссылке
+    event.target.classList.add('active');
+}
+
+function loadSettings() {
+    // Загружаем сохраненные настройки из localStorage
+    const settings = JSON.parse(localStorage.getItem('telegram_platform_settings') || '{}');
+    
+    // Применяем настройки к формам
+    Object.keys(settings).forEach(key => {
+        const element = document.getElementById(key);
+        if (element) {
+            if (element.type === 'checkbox') {
+                element.checked = settings[key];
+            } else {
+                element.value = settings[key];
+            }
+        }
+    });
+}
+
+function saveSettings(formId, settings) {
+    // Сохраняем настройки в localStorage
+    const currentSettings = JSON.parse(localStorage.getItem('telegram_platform_settings') || '{}');
+    const newSettings = { ...currentSettings, ...settings };
+    localStorage.setItem('telegram_platform_settings', JSON.stringify(newSettings));
+    
+    showNotification('Настройки сохранены', 'success');
+}
+
+function saveProxySettings(e) {
+    e.preventDefault();
+    
+    const settings = {
+        defaultProxyType: document.getElementById('defaultProxyType').value,
+        proxyTimeout: document.getElementById('proxyTimeout').value,
+        proxyMaxRetries: document.getElementById('proxyMaxRetries').value,
+        autoRotateProxies: document.getElementById('autoRotateProxies').checked,
+        rotationInterval: document.getElementById('rotationInterval').value,
+        proxyHealthCheck: document.getElementById('proxyHealthCheck').checked
+    };
+    
+    saveSettings('proxySettingsForm', settings);
+}
+
+function saveTelegramSettings(e) {
+    e.preventDefault();
+    
+    const settings = {
+        apiId: document.getElementById('apiId').value,
+        apiHash: document.getElementById('apiHash').value,
+        requestTimeout: document.getElementById('requestTimeout').value,
+        maxConnections: document.getElementById('maxConnections').value,
+        requestDelay: document.getElementById('requestDelay').value,
+        autoReconnect: document.getElementById('autoReconnect').checked
+    };
+    
+    saveSettings('telegramSettingsForm', settings);
+}
+
+function saveLoggingSettings(e) {
+    e.preventDefault();
+    
+    const settings = {
+        logLevel: document.getElementById('logLevel').value,
+        maxLogSize: document.getElementById('maxLogSize').value,
+        logFileCount: document.getElementById('logFileCount').value,
+        logToFile: document.getElementById('logToFile').checked,
+        logToConsole: document.getElementById('logToConsole').checked,
+        logFormat: document.getElementById('logFormat').value
+    };
+    
+    saveSettings('loggingSettingsForm', settings);
+}
+
+function saveApiKeys(e) {
+    e.preventDefault();
+    
+    const settings = {
+        goodProxyApiKey: document.getElementById('goodProxyApiKey').value,
+        proxyApi2Key: document.getElementById('proxyApi2Key').value,
+        smsApiKey: document.getElementById('smsApiKey').value
+    };
+    
+    saveSettings('apiKeysForm', settings);
+}
+
+function saveSecuritySettings(e) {
+    e.preventDefault();
+    
+    const settings = {
+        autoBlacklist: document.getElementById('autoBlacklist').checked,
+        maxErrorsPerAccount: document.getElementById('maxErrorsPerAccount').value,
+        accountBlockTime: document.getElementById('accountBlockTime').value,
+        spamCheck: document.getElementById('spamCheck').checked,
+        messagesPerHour: document.getElementById('messagesPerHour').value,
+        randomDelays: document.getElementById('randomDelays').checked
+    };
+    
+    saveSettings('securitySettingsForm', settings);
+}
+
+function savePerformanceSettings(e) {
+    e.preventDefault();
+    
+    const settings = {
+        threadCount: document.getElementById('threadCount').value,
+        accountPoolSize: document.getElementById('accountPoolSize').value,
+        cacheCleanupInterval: document.getElementById('cacheCleanupInterval').value,
+        maxMemoryUsage: document.getElementById('maxMemoryUsage').value,
+        autoOptimization: document.getElementById('autoOptimization').checked,
+        performanceMonitoring: document.getElementById('performanceMonitoring').checked
+    };
+    
+    saveSettings('performanceSettingsForm', settings);
+}
+
+function testGoodProxyConnection() {
+    const apiKey = document.getElementById('goodProxyApiKey').value;
+    
+    if (!apiKey) {
+        showNotification('Введите API ключ для тестирования', 'error');
+        return;
+    }
+    
+    showLoadingModal();
+    
+    // Имитация тестирования подключения
+    setTimeout(() => {
+        hideLoadingModal();
+        
+        // Случайный результат для демонстрации
+        const success = Math.random() > 0.3;
+        
+        if (success) {
+            showNotification('Подключение к Good Proxy API успешно! Получено 200 прокси', 'success');
+        } else {
+            showNotification('Ошибка подключения к Good Proxy API. Проверьте ключ', 'error');
+        }
+    }, 2000);
+}
+
+// Функция для сброса всех настроек
+function resetAllSettings() {
+    if (confirm('Сбросить все настройки к значениям по умолчанию?')) {
+        localStorage.removeItem('telegram_platform_settings');
+        location.reload();
+    }
+}
+
+// Функция для экспорта настроек
+function exportSettings() {
+    const settings = JSON.parse(localStorage.getItem('telegram_platform_settings') || '{}');
+    const settingsJson = JSON.stringify(settings, null, 2);
+    
+    downloadFile(settingsJson, 'telegram_platform_settings.json', 'application/json');
+    showNotification('Настройки экспортированы', 'success');
+}
+
+// Функция для импорта настроек
+function importSettings() {
+    selectFile((file) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const settings = JSON.parse(e.target.result);
+                localStorage.setItem('telegram_platform_settings', JSON.stringify(settings));
+                location.reload();
+                showNotification('Настройки импортированы', 'success');
+            } catch (error) {
+                showNotification('Ошибка при импорте настроек', 'error');
+            }
+        };
+        reader.readAsText(file);
+    }, '.json');
+}
+
+// Добавляем кнопки управления настройками
+document.addEventListener('DOMContentLoaded', function() {
+    const settingsContainer = document.querySelector('.col-md-9');
+    if (settingsContainer) {
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'mb-3 text-end';
+        controlsDiv.innerHTML = `
+            <button class="btn btn-outline-secondary me-2" onclick="exportSettings()">
+                <i class="fas fa-download"></i> Экспорт
+            </button>
+            <button class="btn btn-outline-info me-2" onclick="importSettings()">
+                <i class="fas fa-upload"></i> Импорт
+            </button>
+            <button class="btn btn-outline-danger" onclick="resetAllSettings()">
+                <i class="fas fa-undo"></i> Сброс
+            </button>
+        `;
+        settingsContainer.insertBefore(controlsDiv, settingsContainer.firstChild);
+    }
+});
+</script>
+{% endblock %}
