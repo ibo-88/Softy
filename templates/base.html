@@ -47,6 +47,24 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'registration_page' %}active{% endif %}" href="{{ url_for('registration_page') }}">
+                                <i class="fas fa-user-plus"></i>
+                                📱 Регистрация
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'invitations_page' %}active{% endif %}" href="{{ url_for('invitations_page') }}">
+                                <i class="fas fa-envelope"></i>
+                                📨 Приглашения
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'subscriptions_page' %}active{% endif %}" href="{{ url_for('subscriptions_page') }}">
+                                <i class="fas fa-users"></i>
+                                👥 Подписки
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'blacklist_page' %}active{% endif %}" href="{{ url_for('blacklist_page') }}">
                                 <i class="fas fa-ban"></i>
                                 🚫 Blacklist

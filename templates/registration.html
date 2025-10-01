@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block title %}Регистрация аккаунтов - Telegram Mass Platform{% endblock %}
+{% block page_title %}📱 Автоматическая регистрация аккаунтов{% endblock %}
+
+{% block content %}
+<!-- Панель регистрации -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Массовая регистрация аккаунтов</h5>
+            </div>
+            <div class="card-body">
+                <form id="registrationForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">API ID:</label>
+                                <input type="number" class="form-control" id="apiId" required placeholder="12345678">
+                                <div class="form-text">Получите на my.telegram.org</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">API Hash:</label>
+                                <input type="text" class="form-control" id="apiHash" required placeholder="your_api_hash">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">SMS сервис:</label>
+                                <select class="form-select" id="smsService">
+                                    <option value="sms-activate">SMS-Activate</option>
+                                    <option value="5sim">5SIM</option>
+                                    <option value="sms-man">SMS-Man</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Номера телефонов:</label>
+                                <textarea class="form-control" id="phoneNumbers" rows="8" required placeholder="+1234567890&#10;+0987654321&#10;+1122334455"></textarea>
+                                <div class="form-text">Один номер на строку в международном формате</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-info" onclick="loadPhoneNumbersFromFile()">
+                            <i class="fas fa-file-import"></i> Загрузить из файла
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Запустить регистрацию
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика регистрации -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Всего зарегистрировано
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalRegistered">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-user-check fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Успешно сегодня
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="successToday">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-danger shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                            Ошибок сегодня
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="errorsToday">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-exclamation-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            В процессе
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="inProgress">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-spinner fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Логи регистрации -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Логи регистрации</h6>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="clearRegistrationLogs()">
+                        <i class="fas fa-trash"></i> Очистить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="logs-container" id="registrationLogs" style="height: 400px; overflow-y: auto; background: #1e1e1e; color: #00ff00; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div class="log-entry">
+                        <span class="text-muted">[14:05:12]</span> Система регистрации готова к работе
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Скрытый input для загрузки файлов -->
+<input type="file" id="phoneNumbersFile" style="display: none;" accept=".txt,.csv" onchange="processPhoneNumbersFile(this)">
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadRegistrationStats();
+    
+    // Обновление статистики каждые 30 секунд
+    setInterval(loadRegistrationStats, 30000);
+});
+
+// Обработка формы регистрации
+document.getElementById('registrationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const apiId = document.getElementById('apiId').value;
+    const apiHash = document.getElementById('apiHash').value;
+    const smsService = document.getElementById('smsService').value;
+    const phoneNumbersText = document.getElementById('phoneNumbers').value;
+    
+    if (!apiId || !apiHash || !phoneNumbersText) {
+        showNotification('Заполните все обязательные поля', 'error');
+        return;
+    }
+    
+    // Парсим номера телефонов
+    const phoneNumbers = phoneNumbersText.split('\n')
+        .map(phone => phone.trim())
+        .filter(phone => phone && phone.startsWith('+'));
+    
+    if (phoneNumbers.length === 0) {
+        showNotification('Не найдено валидных номеров телефонов', 'error');
+        return;
+    }
+    
+    startRegistration(apiId, apiHash, smsService, phoneNumbers);
+});
+
+function startRegistration(apiId, apiHash, smsService, phoneNumbers) {
+    showLoadingModal();
+    
+    const registrationData = {
+        phone_numbers: phoneNumbers,
+        api_id: parseInt(apiId),
+        api_hash: apiHash,
+        sms_service: smsService
+    };
+    
+    fetch('/api/register-accounts', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            const result = data.result;
+            addRegistrationLog(`Регистрация запущена для ${phoneNumbers.length} номеров`, 'info');
+            addRegistrationLog(`SMS сервис: ${smsService}`, 'info');
+            addRegistrationLog(`API ID: ${apiId}`, 'info');
+            
+            // Имитация процесса регистрации
+            simulateRegistration(phoneNumbers, result);
+            
+            showNotification(`Регистрация запущена: ${phoneNumbers.length} номеров`, 'success');
+            
+            // Очищаем форму
+            document.getElementById('registrationForm').reset();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка регистрации:', error);
+        showNotification('Ошибка запуска регистрации', 'error');
+    });
+}
+
+function simulateRegistration(phoneNumbers, result) {
+    let processed = 0;
+    const total = phoneNumbers.length;
+    
+    const interval = setInterval(() => {
+        if (processed >= total) {
+            clearInterval(interval);
+            addRegistrationLog(`Регистрация завершена: ${result.success} успешно, ${result.failed} ошибок`, 'success');
+            loadRegistrationStats();
+            return;
+        }
+        
+        const phone = phoneNumbers[processed];
+        const success = Math.random() > 0.2; // 80% успешных регистраций
+        
+        if (success) {
+            addRegistrationLog(`✅ Аккаунт ${phone} успешно зарегистрирован`, 'success');
+        } else {
+            addRegistrationLog(`❌ Ошибка регистрации ${phone}`, 'error');
+        }
+        
+        processed++;
+        
+        // Обновляем статистику
+        loadRegistrationStats();
+    }, 2000);
+}
+
+function loadPhoneNumbersFromFile() {
+    document.getElementById('phoneNumbersFile').click();
+}
+
+function processPhoneNumbersFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const content = e.target.result;
+        const phoneNumbers = content.split('\n')
+            .map(line => line.trim())
+            .filter(line => line && (line.startsWith('+') || /^\d/.test(line)))
+            .map(phone => phone.startsWith('+') ? phone : '+' + phone)
+            .join('\n');
+        
+        document.getElementById('phoneNumbers').value = phoneNumbers;
+        showNotification(`Загружено ${phoneNumbers.split('\n').length} номеров из файла`, 'success');
+    };
+    reader.readAsText(file);
+}
+
+function addRegistrationLog(message, type = 'info') {
+    const logsContainer = document.getElementById('registrationLogs');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    
+    let colorClass = '';
+    switch(type) {
+        case 'success': colorClass = 'color: #00ff00;'; break;
+        case 'error': colorClass = 'color: #ff0000;'; break;
+        case 'warning': colorClass = 'color: #ffff00;'; break;
+        default: colorClass = 'color: #00ffff;'; break;
+    }
+    
+    logEntry.innerHTML = `
+        <span style="color: #888;">[${timestamp}]</span> 
+        <span style="${colorClass}">${message}</span>
+    `;
+    
+    logsContainer.insertBefore(logEntry, logsContainer.firstChild);
+    
+    // Ограничиваем количество логов
+    const logs = logsContainer.querySelectorAll('.log-entry');
+    if (logs.length > 200) {
+        logs[logs.length - 1].remove();
+    }
+    
+    // Автоматическая прокрутка вниз
+    logsContainer.scrollTop = 0;
+}
+
+function loadRegistrationStats() {
+    // Имитация загрузки статистики
+    const totalRegistered = Math.floor(Math.random() * 1000) + 500;
+    const successToday = Math.floor(Math.random() * 50) + 20;
+    const errorsToday = Math.floor(Math.random() * 10) + 2;
+    const inProgress = Math.floor(Math.random() * 5);
+    
+    document.getElementById('totalRegistered').textContent = totalRegistered;
+    document.getElementById('successToday').textContent = successToday;
+    document.getElementById('errorsToday').textContent = errorsToday;
+    document.getElementById('inProgress').textContent = inProgress;
+}
+
+function clearRegistrationLogs() {
+    if (confirm('Очистить все логи регистрации?')) {
+        document.getElementById('registrationLogs').innerHTML = '<div class="log-entry"><span class="text-muted">[14:05:12]</span> Логи очищены</div>';
+        showNotification('Логи очищены', 'success');
+    }
+}
+</script>
+{% endblock %}

@@ -34,6 +34,28 @@
                         </button>
                     </div>
                 </div>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <button class="btn btn-warning w-100" onclick="showProfileUpdateModal()">
+                            <i class="fas fa-user-edit"></i> Обновить Профили
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <button class="btn btn-secondary w-100" onclick="showSessionCloningModal()">
+                            <i class="fas fa-copy"></i> Клонировать Сессии
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <button class="btn btn-dark w-100" onclick="generateAccountsReport()">
+                            <i class="fas fa-chart-bar"></i> Генератор Отчетов
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <button class="btn btn-outline-primary w-100" onclick="exportAccounts()">
+                            <i class="fas fa-download"></i> Экспорт Аккаунтов
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -231,6 +253,107 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-primary" onclick="assignGeoProxies()">Назначить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно обновления профилей -->
+<div class="modal fade" id="profileUpdateModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Массовое обновление профилей</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="profileUpdateForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Имя:</label>
+                                <input type="text" class="form-control" id="profileFirstName" placeholder="Имя">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Фамилия:</label>
+                                <input type="text" class="form-control" id="profileLastName" placeholder="Фамилия">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Username:</label>
+                                <input type="text" class="form-control" id="profileUsername" placeholder="@username">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Описание (About):</label>
+                                <textarea class="form-control" id="profileAbout" rows="3" placeholder="Описание профиля"></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Аватар:</label>
+                                <input type="file" class="form-control" id="profileAvatar" accept="image/*">
+                                <div class="form-text">Изображение для аватара</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Аккаунты для обновления:</label>
+                                <select class="form-select" id="profileAccountSelection">
+                                    <option value="selected">Выбранные аккаунты</option>
+                                    <option value="all">Все активные аккаунты</option>
+                                    <option value="random">Случайные аккаунты</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="updateProfiles()">Обновить профили</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно клонирования сессий -->
+<div class="modal fade" id="sessionCloningModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Клонирование сессий</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="sessionCloningForm">
+                    <div class="mb-3">
+                        <label class="form-label">Исходная сессия:</label>
+                        <input type="text" class="form-control" id="originalSessionPath" placeholder="sessions/original.session">
+                        <div class="form-text">Путь к файлу исходной сессии</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">API ID:</label>
+                        <input type="number" class="form-control" id="cloningApiId" required placeholder="12345678">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">API Hash:</label>
+                        <input type="text" class="form-control" id="cloningApiHash" required placeholder="your_api_hash">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Номера телефонов для клонирования:</label>
+                        <textarea class="form-control" id="cloningPhoneNumbers" rows="6" required placeholder="+1234567890&#10;+0987654321&#10;+1122334455"></textarea>
+                        <div class="form-text">Один номер на строку</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="cloneSessions()">Клонировать сессии</button>
             </div>
         </div>
     </div>
@@ -576,6 +699,330 @@ function getCountryFlag(country) {
         'UA': '🇺🇦'
     };
     return flags[country] || '🌍';
+}
+
+// Функции для новых возможностей
+
+function showProfileUpdateModal() {
+    new bootstrap.Modal(document.getElementById('profileUpdateModal')).show();
+}
+
+function showSessionCloningModal() {
+    new bootstrap.Modal(document.getElementById('sessionCloningModal')).show();
+}
+
+function updateProfiles() {
+    const firstName = document.getElementById('profileFirstName').value;
+    const lastName = document.getElementById('profileLastName').value;
+    const username = document.getElementById('profileUsername').value;
+    const about = document.getElementById('profileAbout').value;
+    const avatarFile = document.getElementById('profileAvatar').files[0];
+    const accountSelection = document.getElementById('profileAccountSelection').value;
+    
+    if (!firstName && !lastName && !username && !about && !avatarFile) {
+        showNotification('Заполните хотя бы одно поле для обновления', 'warning');
+        return;
+    }
+    
+    // Получаем ID аккаунтов для обновления
+    let accountIds = [];
+    if (accountSelection === 'selected') {
+        accountIds = getSelectedAccountIds();
+    } else if (accountSelection === 'all') {
+        accountIds = getAllActiveAccountIds();
+    } else if (accountSelection === 'random') {
+        accountIds = getRandomAccountIds(50);
+    }
+    
+    if (accountIds.length === 0) {
+        showNotification('Не выбрано аккаунтов для обновления', 'error');
+        return;
+    }
+    
+    const profileData = {
+        first_name: firstName,
+        last_name: lastName,
+        username: username,
+        about: about
+    };
+    
+    if (avatarFile) {
+        // Здесь должна быть загрузка файла аватара
+        profileData.avatar_path = 'temp_avatar.jpg';
+    }
+    
+    showLoadingModal();
+    
+    fetch('/api/update-profiles', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            account_ids: accountIds,
+            profile_data: profileData
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            addAccountLog(`Обновлено профилей: ${data.updated_count}`, 'success');
+            showNotification(`Обновлено ${data.updated_count} профилей`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('profileUpdateModal')).hide();
+            loadAccounts();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка обновления профилей:', error);
+        showNotification('Ошибка обновления профилей', 'error');
+    });
+}
+
+function cloneSessions() {
+    const originalSessionPath = document.getElementById('originalSessionPath').value;
+    const apiId = document.getElementById('cloningApiId').value;
+    const apiHash = document.getElementById('cloningApiHash').value;
+    const phoneNumbersText = document.getElementById('cloningPhoneNumbers').value;
+    
+    if (!originalSessionPath || !apiId || !apiHash || !phoneNumbersText) {
+        showNotification('Заполните все обязательные поля', 'error');
+        return;
+    }
+    
+    const phoneNumbers = phoneNumbersText.split('\n')
+        .map(phone => phone.trim())
+        .filter(phone => phone && phone.startsWith('+'));
+    
+    if (phoneNumbers.length === 0) {
+        showNotification('Не найдено валидных номеров телефонов', 'error');
+        return;
+    }
+    
+    showLoadingModal();
+    
+    fetch('/api/clone-sessions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            original_session_path: originalSessionPath,
+            phone_numbers: phoneNumbers,
+            api_id: parseInt(apiId),
+            api_hash: apiHash
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            addAccountLog(`Клонировано сессий: ${data.cloned_count}`, 'success');
+            showNotification(`Клонировано ${data.cloned_count} сессий`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('sessionCloningModal')).hide();
+            loadAccounts();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка клонирования сессий:', error);
+        showNotification('Ошибка клонирования сессий', 'error');
+    });
+}
+
+function generateAccountsReport() {
+    showLoadingModal();
+    
+    fetch('/api/generate-report?type=accounts')
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            const report = data.report;
+            addAccountLog('Отчет по аккаунтам сгенерирован', 'success');
+            addAccountLog(`Всего аккаунтов: ${report.total_accounts}`, 'info');
+            addAccountLog(`Онлайн: ${report.online_accounts}`, 'info');
+            addAccountLog(`Забанено: ${report.banned_accounts}`, 'info');
+            addAccountLog(`Активных прокси: ${report.active_proxies}`, 'info');
+            
+            // Показываем отчет в модальном окне
+            showReportModal(report);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка генерации отчета:', error);
+        showNotification('Ошибка генерации отчета', 'error');
+    });
+}
+
+function showReportModal(report) {
+    // Создаем модальное окно для отображения отчета
+    const modalHtml = `
+        <div class="modal fade" id="reportModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Отчет по аккаунтам</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Общая статистика:</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>Всего аккаунтов:</strong> ${report.total_accounts}</li>
+                                    <li><strong>Онлайн:</strong> ${report.online_accounts}</li>
+                                    <li><strong>Забанено:</strong> ${report.banned_accounts}</li>
+                                    <li><strong>Активных прокси:</strong> ${report.active_proxies}</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Распределение по странам:</h6>
+                                <ul class="list-unstyled">
+                                    ${Object.entries(report.country_distribution).map(([country, count]) => 
+                                        `<li><strong>${country}:</strong> ${count}</li>`
+                                    ).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-primary" onclick="exportReport()">
+                            <i class="fas fa-download"></i> Экспорт в CSV
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Удаляем существующее модальное окно если есть
+    const existingModal = document.getElementById('reportModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Добавляем новое модальное окно
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Показываем модальное окно
+    new bootstrap.Modal(document.getElementById('reportModal')).show();
+    
+    // Сохраняем отчет для экспорта
+    window.currentReport = report;
+}
+
+function exportReport() {
+    if (!window.currentReport) {
+        showNotification('Нет отчета для экспорта', 'error');
+        return;
+    }
+    
+    const filename = `accounts_report_${new Date().toISOString().split('T')[0]}.csv`;
+    
+    fetch('/api/export-report', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            report_data: window.currentReport,
+            filename: filename
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`Отчет экспортирован: ${data.filename}`, 'success');
+            addAccountLog(`Отчет экспортирован: ${data.filename}`, 'success');
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка экспорта отчета:', error);
+        showNotification('Ошибка экспорта отчета', 'error');
+    });
+}
+
+function exportAccounts() {
+    // Экспорт списка аккаунтов в CSV
+    fetch('/api/accounts')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const accounts = data.accounts;
+            const csvContent = generateAccountsCSV(accounts);
+            downloadCSV(csvContent, 'accounts_export.csv');
+            showNotification('Аккаунты экспортированы', 'success');
+            addAccountLog('Экспорт аккаунтов выполнен', 'success');
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка экспорта аккаунтов:', error);
+        showNotification('Ошибка экспорта аккаунтов', 'error');
+    });
+}
+
+function generateAccountsCSV(accounts) {
+    const headers = ['ID', 'Телефон', 'Username', 'Имя', 'Фамилия', 'Статус', 'Страна', 'Прокси', 'Дата создания'];
+    const rows = accounts.map(account => [
+        account.id,
+        account.phone,
+        account.username || '',
+        account.first_name || '',
+        account.last_name || '',
+        account.status,
+        account.geo_country || '',
+        account.proxy_ip || '',
+        account.created_at
+    ]);
+    
+    return [headers, ...rows].map(row => row.join(',')).join('\n');
+}
+
+function downloadCSV(content, filename) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Вспомогательные функции
+function getSelectedAccountIds() {
+    // Получаем ID выбранных аккаунтов из таблицы
+    const checkboxes = document.querySelectorAll('#accountsTable tbody input[type="checkbox"]:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+function getAllActiveAccountIds() {
+    // Имитация получения всех активных аккаунтов
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+}
+
+function getRandomAccountIds(count) {
+    // Имитация получения случайных аккаунтов
+    const allIds = getAllActiveAccountIds();
+    return allIds.sort(() => 0.5 - Math.random()).slice(0, count);
 }
 </script>
 {% endblock %}

@@ -1,0 +1,590 @@
+{% extends "base.html" %}
+
+{% block title %}Подписки - Telegram Mass Platform{% endblock %}
+{% block page_title %}👥 Массовые подписки{% endblock %}
+
+{% block content %}
+<!-- Панель создания подписок -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Создать кампанию подписок</h5>
+            </div>
+            <div class="card-body">
+                <form id="subscriptionForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Название кампании:</label>
+                                <input type="text" class="form-control" id="campaignName" required placeholder="Подписка на каналы">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Каналы для подписки:</label>
+                                <textarea class="form-control" id="targetChannels" rows="6" required placeholder="@channel1&#10;@channel2&#10;https://t.me/channel3"></textarea>
+                                <div class="form-text">Один канал на строку (@username или ссылка)</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Тип кампании:</label>
+                                <select class="form-select" id="campaignType">
+                                    <option value="subscribe">Подписка на каналы</option>
+                                    <option value="unsubscribe">Отписка от каналов</option>
+                                    <option value="boost">Накрутка подписчиков</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Аккаунты для использования:</label>
+                                <select class="form-select" id="accountSelection">
+                                    <option value="all">Все активные аккаунты</option>
+                                    <option value="selected">Выбранные аккаунты</option>
+                                    <option value="random">Случайные аккаунты</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3" id="accountCountSection" style="display: none;">
+                                <label class="form-label">Количество аккаунтов:</label>
+                                <input type="number" class="form-control" id="accountCount" value="50" min="1" max="1000">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Задержка между подписками (сек):</label>
+                                <input type="number" class="form-control" id="subscriptionDelay" value="10" min="5" max="300">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Задержка между аккаунтами (сек):</label>
+                                <input type="number" class="form-control" id="accountDelay" value="30" min="10" max="600">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="randomizeOrder" checked>
+                                    <label class="form-check-label" for="randomizeOrder">
+                                        Случайный порядок подписок
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-info" onclick="previewSubscription()">
+                            <i class="fas fa-eye"></i> Предварительный просмотр
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-play"></i> Запустить подписки
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика подписок -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Всего подписок
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalSubscriptions">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-user-plus fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Успешно сегодня
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="successToday">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Активных кампаний
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="activeCampaigns">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-play-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Каналов в работе
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="channelsInWork">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-broadcast-tower fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Активные кампании подписок -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Активные кампании подписок</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshSubscriptions()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="subscriptionsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Тип</th>
+                                <th>Каналы</th>
+                                <th>Аккаунты</th>
+                                <th>Прогресс</th>
+                                <th>Статус</th>
+                                <th>Успешно</th>
+                                <th>Ошибки</th>
+                                <th>Запущено</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Данные загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Логи подписок -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Логи подписок</h6>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="clearSubscriptionLogs()">
+                        <i class="fas fa-trash"></i> Очистить
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="logs-container" id="subscriptionLogs" style="height: 400px; overflow-y: auto; background: #1e1e1e; color: #00ff00; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div class="log-entry">
+                        <span class="text-muted">[14:05:12]</span> Система подписок готова к работе
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно предварительного просмотра -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Предварительный просмотр кампании</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Параметры кампании:</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Название:</strong> <span id="previewName"></span></li>
+                            <li><strong>Тип:</strong> <span id="previewType"></span></li>
+                            <li><strong>Аккаунты:</strong> <span id="previewAccounts"></span></li>
+                            <li><strong>Задержки:</strong> <span id="previewDelays"></span></li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Целевые каналы:</h6>
+                        <div id="previewChannels"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let subscriptionCampaigns = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadSubscriptionCampaigns();
+    loadSubscriptionStats();
+    
+    // Обновление каждые 10 секунд
+    setInterval(loadSubscriptionCampaigns, 10000);
+    setInterval(loadSubscriptionStats, 30000);
+});
+
+// Обработка изменения выбора аккаунтов
+document.getElementById('accountSelection').addEventListener('change', function() {
+    const accountCountSection = document.getElementById('accountCountSection');
+    if (this.value === 'selected' || this.value === 'random') {
+        accountCountSection.style.display = 'block';
+    } else {
+        accountCountSection.style.display = 'none';
+    }
+});
+
+// Обработка формы подписок
+document.getElementById('subscriptionForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const campaignName = document.getElementById('campaignName').value;
+    const targetChannels = document.getElementById('targetChannels').value;
+    const campaignType = document.getElementById('campaignType').value;
+    const accountSelection = document.getElementById('accountSelection').value;
+    
+    if (!campaignName || !targetChannels) {
+        showNotification('Заполните все обязательные поля', 'error');
+        return;
+    }
+    
+    // Парсим каналы
+    const channels = targetChannels.split('\n')
+        .map(channel => channel.trim())
+        .filter(channel => channel)
+        .map(channel => {
+            if (channel.startsWith('https://t.me/')) {
+                return '@' + channel.split('/').pop();
+            } else if (!channel.startsWith('@')) {
+                return '@' + channel;
+            }
+            return channel;
+        });
+    
+    if (channels.length === 0) {
+        showNotification('Не найдено валидных каналов', 'error');
+        return;
+    }
+    
+    const accountCount = accountSelection === 'all' ? null : parseInt(document.getElementById('accountCount').value);
+    
+    startSubscriptionCampaign(campaignName, channels, campaignType, accountSelection, accountCount);
+});
+
+function startSubscriptionCampaign(campaignName, channels, campaignType, accountSelection, accountCount) {
+    showLoadingModal();
+    
+    const subscriptionData = {
+        channels: channels,
+        account_ids: accountSelection === 'selected' ? getSelectedAccountIds() : null,
+        account_count: accountCount
+    };
+    
+    fetch('/api/mass-subscribe', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(subscriptionData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingModal();
+        
+        if (data.success) {
+            const campaign = {
+                id: Date.now(),
+                name: campaignName,
+                type: campaignType,
+                channels: channels,
+                channel_count: channels.length,
+                account_count: accountCount || 'Все',
+                sent_count: 0,
+                success_count: 0,
+                error_count: 0,
+                status: 'running',
+                started_at: new Date().toISOString()
+            };
+            
+            subscriptionCampaigns.push(campaign);
+            displaySubscriptionCampaigns();
+            
+            addSubscriptionLog(`Кампания "${campaignName}" запущена`, 'info');
+            addSubscriptionLog(`Тип: ${getCampaignTypeText(campaignType)}`, 'info');
+            addSubscriptionLog(`Каналов: ${channels.length}`, 'info');
+            addSubscriptionLog(`Аккаунтов: ${accountCount || 'Все'}`, 'info');
+            
+            // Имитация работы подписок
+            simulateSubscriptionCampaign(campaign.id, channels);
+            
+            showNotification('Кампания подписок запущена', 'success');
+            
+            // Очищаем форму
+            document.getElementById('subscriptionForm').reset();
+            document.getElementById('accountCountSection').style.display = 'none';
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingModal();
+        console.error('Ошибка запуска подписок:', error);
+        showNotification('Ошибка запуска подписок', 'error');
+    });
+}
+
+function simulateSubscriptionCampaign(campaignId, channels) {
+    const campaign = subscriptionCampaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+    
+    let processed = 0;
+    const total = channels.length * (campaign.account_count === 'Все' ? 100 : campaign.account_count);
+    
+    const interval = setInterval(() => {
+        if (processed >= total || campaign.status !== 'running') {
+            clearInterval(interval);
+            campaign.status = 'completed';
+            addSubscriptionLog(`Кампания "${campaign.name}" завершена`, 'success');
+            addSubscriptionLog(`Итого подписок: ${campaign.sent_count}`, 'success');
+            addSubscriptionLog(`Успешно: ${campaign.success_count}`, 'success');
+            addSubscriptionLog(`Ошибок: ${campaign.error_count}`, 'success');
+            displaySubscriptionCampaigns();
+            return;
+        }
+        
+        const channel = channels[processed % channels.length];
+        const success = Math.random() > 0.1; // 90% успешных подписок
+        
+        campaign.sent_count++;
+        
+        if (success) {
+            campaign.success_count++;
+            addSubscriptionLog(`✅ Подписка на ${channel} успешна`, 'success');
+        } else {
+            campaign.error_count++;
+            addSubscriptionLog(`❌ Ошибка подписки на ${channel}`, 'error');
+        }
+        
+        processed++;
+        displaySubscriptionCampaigns();
+    }, 2000);
+}
+
+function displaySubscriptionCampaigns() {
+    const tbody = document.querySelector('#subscriptionsTable tbody');
+    tbody.innerHTML = '';
+    
+    subscriptionCampaigns.forEach(campaign => {
+        const progress = campaign.sent_count > 0 ? (campaign.success_count / campaign.sent_count * 100).toFixed(1) : 0;
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${campaign.id}</td>
+            <td>${campaign.name}</td>
+            <td><span class="badge ${getCampaignTypeBadge(campaign.type)}">${getCampaignTypeText(campaign.type)}</span></td>
+            <td>${campaign.channel_count}</td>
+            <td>${campaign.account_count}</td>
+            <td>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar" role="progressbar" style="width: ${progress}%">
+                        ${progress}%
+                    </div>
+                </div>
+                <small class="text-muted">${campaign.sent_count} подписок</small>
+            </td>
+            <td><span class="badge ${campaign.status === 'running' ? 'bg-warning' : 'bg-success'}">${campaign.status === 'running' ? 'Выполняется' : 'Завершено'}</span></td>
+            <td>${campaign.success_count}</td>
+            <td>${campaign.error_count}</td>
+            <td>${formatDate(campaign.started_at)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-danger" onclick="stopSubscriptionCampaign(${campaign.id})" title="Остановить">
+                    <i class="fas fa-stop"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function getCampaignTypeText(type) {
+    const types = {
+        'subscribe': 'Подписка',
+        'unsubscribe': 'Отписка',
+        'boost': 'Накрутка'
+    };
+    return types[type] || type;
+}
+
+function getCampaignTypeBadge(type) {
+    const badges = {
+        'subscribe': 'bg-primary',
+        'unsubscribe': 'bg-warning',
+        'boost': 'bg-success'
+    };
+    return badges[type] || 'bg-secondary';
+}
+
+function getSelectedAccountIds() {
+    // Имитация получения выбранных аккаунтов
+    return [1, 2, 3, 4, 5];
+}
+
+function stopSubscriptionCampaign(campaignId) {
+    if (confirm('Остановить кампанию подписок?')) {
+        const campaign = subscriptionCampaigns.find(c => c.id === campaignId);
+        if (campaign) {
+            campaign.status = 'stopped';
+            addSubscriptionLog(`Кампания "${campaign.name}" остановлена`, 'warning');
+            displaySubscriptionCampaigns();
+            showNotification('Кампания остановлена', 'warning');
+        }
+    }
+}
+
+function previewSubscription() {
+    const campaignName = document.getElementById('campaignName').value;
+    const targetChannels = document.getElementById('targetChannels').value;
+    const campaignType = document.getElementById('campaignType').value;
+    const accountSelection = document.getElementById('accountSelection').value;
+    const accountCount = document.getElementById('accountCount').value;
+    const subscriptionDelay = document.getElementById('subscriptionDelay').value;
+    const accountDelay = document.getElementById('accountDelay').value;
+    
+    if (!campaignName || !targetChannels) {
+        showNotification('Заполните название и каналы', 'warning');
+        return;
+    }
+    
+    // Парсим каналы для предварительного просмотра
+    const channels = targetChannels.split('\n')
+        .map(channel => channel.trim())
+        .filter(channel => channel)
+        .map(channel => {
+            if (channel.startsWith('https://t.me/')) {
+                return '@' + channel.split('/').pop();
+            } else if (!channel.startsWith('@')) {
+                return '@' + channel;
+            }
+            return channel;
+        });
+    
+    document.getElementById('previewName').textContent = campaignName;
+    document.getElementById('previewType').textContent = getCampaignTypeText(campaignType);
+    document.getElementById('previewAccounts').textContent = accountSelection === 'all' ? 'Все активные' : `${accountCount} аккаунтов`;
+    document.getElementById('previewDelays').textContent = `${subscriptionDelay}с между подписками, ${accountDelay}с между аккаунтами`;
+    
+    const channelsList = document.getElementById('previewChannels');
+    channelsList.innerHTML = channels.map(channel => `<div class="badge bg-primary me-1 mb-1">${channel}</div>`).join('');
+    
+    new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+function addSubscriptionLog(message, type = 'info') {
+    const logsContainer = document.getElementById('subscriptionLogs');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    
+    let colorClass = '';
+    switch(type) {
+        case 'success': colorClass = 'color: #00ff00;'; break;
+        case 'error': colorClass = 'color: #ff0000;'; break;
+        case 'warning': colorClass = 'color: #ffff00;'; break;
+        default: colorClass = 'color: #00ffff;'; break;
+    }
+    
+    logEntry.innerHTML = `
+        <span style="color: #888;">[${timestamp}]</span> 
+        <span style="${colorClass}">${message}</span>
+    `;
+    
+    logsContainer.insertBefore(logEntry, logsContainer.firstChild);
+    
+    // Ограничиваем количество логов
+    const logs = logsContainer.querySelectorAll('.log-entry');
+    if (logs.length > 200) {
+        logs[logs.length - 1].remove();
+    }
+    
+    // Автоматическая прокрутка вниз
+    logsContainer.scrollTop = 0;
+}
+
+function loadSubscriptionCampaigns() {
+    displaySubscriptionCampaigns();
+}
+
+function loadSubscriptionStats() {
+    // Имитация загрузки статистики
+    const totalSubscriptions = Math.floor(Math.random() * 5000) + 2000;
+    const successToday = Math.floor(Math.random() * 200) + 100;
+    const activeCampaigns = subscriptionCampaigns.filter(c => c.status === 'running').length;
+    const channelsInWork = subscriptionCampaigns.reduce((sum, c) => sum + c.channel_count, 0);
+    
+    document.getElementById('totalSubscriptions').textContent = totalSubscriptions;
+    document.getElementById('successToday').textContent = successToday;
+    document.getElementById('activeCampaigns').textContent = activeCampaigns;
+    document.getElementById('channelsInWork').textContent = channelsInWork;
+}
+
+function refreshSubscriptions() {
+    loadSubscriptionCampaigns();
+    loadSubscriptionStats();
+    showNotification('Список кампаний обновлен', 'success');
+}
+
+function clearSubscriptionLogs() {
+    if (confirm('Очистить все логи подписок?')) {
+        document.getElementById('subscriptionLogs').innerHTML = '<div class="log-entry"><span class="text-muted">[14:05:12]</span> Логи очищены</div>';
+        showNotification('Логи очищены', 'success');
+    }
+}
+</script>
+{% endblock %}
