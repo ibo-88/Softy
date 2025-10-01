@@ -1,0 +1,740 @@
+{% extends "base.html" %}
+
+{% block title %}Blacklist - Telegram Mass Platform{% endblock %}
+{% block page_title %}🚫 Blacklist (Черный Список){% endblock %}
+
+{% block content %}
+<!-- Статистика Blacklist -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-left-danger shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                            Всего в Blacklist
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalBlacklist">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-ban fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Забаненные пользователи
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="bannedUsers">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-user-times fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Запрещенные чаты
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="forbiddenChats">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-comment-slash fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Автоматически добавлено
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="autoAdded">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-robot fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Панель управления -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Управление Blacklist</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <button class="btn btn-primary w-100" onclick="showAddToBlacklistModal()">
+                            <i class="fas fa-plus"></i> Добавить вручную
+                        </button>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <button class="btn btn-success w-100" onclick="importBlacklist()">
+                            <i class="fas fa-file-import"></i> Импорт из файла
+                        </button>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <button class="btn btn-warning w-100" onclick="exportBlacklist()">
+                            <i class="fas fa-file-export"></i> Экспорт Blacklist
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Фильтры и поиск -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Поиск:</label>
+                        <input type="text" class="form-control" id="searchInput" placeholder="Поиск по ID, username или причине...">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Тип:</label>
+                        <select class="form-select" id="typeFilter">
+                            <option value="">Все типы</option>
+                            <option value="user">Пользователь</option>
+                            <option value="chat">Чат</option>
+                            <option value="channel">Канал</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Причина:</label>
+                        <select class="form-select" id="reasonFilter">
+                            <option value="">Все причины</option>
+                            <option value="USER_BANNED">USER_BANNED</option>
+                            <option value="CHAT_FORBIDDEN">CHAT_FORBIDDEN</option>
+                            <option value="PEER_ID_INVALID">PEER_ID_INVALID</option>
+                            <option value="manual">Добавлено вручную</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">&nbsp;</label>
+                        <button class="btn btn-secondary w-100" onclick="applyFilters()">
+                            <i class="fas fa-filter"></i> Применить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Таблица Blacklist -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Список Blacklist</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="selectAll()">
+                        <i class="fas fa-check-square"></i> Выбрать все
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeSelected()">
+                        <i class="fas fa-trash"></i> Удалить выбранные
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="blacklistTable">
+                        <thead>
+                            <tr>
+                                <th>
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                                </th>
+                                <th>ID</th>
+                                <th>Тип</th>
+                                <th>Username/Название</th>
+                                <th>Причина</th>
+                                <th>Добавлено</th>
+                                <th>Источник</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Данные загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Пагинация -->
+                <nav aria-label="Пагинация Blacklist">
+                    <ul class="pagination justify-content-center" id="pagination">
+                        <!-- Пагинация генерируется через JavaScript -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления в Blacklist -->
+<div class="modal fade" id="addToBlacklistModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить в Blacklist</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addToBlacklistForm">
+                    <div class="mb-3">
+                        <label class="form-label">Тип:</label>
+                        <select class="form-select" id="blacklistType" required onchange="toggleBlacklistFields()">
+                            <option value="">Выберите тип</option>
+                            <option value="user">Пользователь</option>
+                            <option value="chat">Чат</option>
+                            <option value="channel">Канал</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="userIdField" style="display: none;">
+                        <label class="form-label">ID пользователя:</label>
+                        <input type="text" class="form-control" id="userId" placeholder="123456789">
+                    </div>
+                    
+                    <div class="mb-3" id="usernameField" style="display: none;">
+                        <label class="form-label">Username:</label>
+                        <input type="text" class="form-control" id="username" placeholder="@username">
+                    </div>
+                    
+                    <div class="mb-3" id="chatIdField" style="display: none;">
+                        <label class="form-label">ID чата/канала:</label>
+                        <input type="text" class="form-control" id="chatId" placeholder="-1001234567890">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Причина:</label>
+                        <select class="form-select" id="blacklistReason" required>
+                            <option value="">Выберите причину</option>
+                            <option value="USER_BANNED">USER_BANNED</option>
+                            <option value="CHAT_FORBIDDEN">CHAT_FORBIDDEN</option>
+                            <option value="PEER_ID_INVALID">PEER_ID_INVALID</option>
+                            <option value="manual">Добавлено вручную</option>
+                            <option value="spam">Спам</option>
+                            <option value="blocked">Заблокировал бота</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Комментарий (опционально):</label>
+                        <textarea class="form-control" id="blacklistComment" rows="3" placeholder="Дополнительная информация..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="addToBlacklist()">Добавить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно импорта -->
+<div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Импорт Blacklist</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Выберите файл:</label>
+                    <input type="file" class="form-control" id="importFile" accept=".csv,.txt,.json">
+                    <div class="form-text">
+                        Поддерживаемые форматы: CSV, TXT, JSON<br>
+                        Формат CSV: type,id,username,reason,comment
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Файл должен содержать данные в формате: тип, ID, username, причина, комментарий
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="processImport()">Импортировать</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let blacklistData = [];
+let filteredBlacklist = [];
+let currentPage = 1;
+const itemsPerPage = 50;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadBlacklistData();
+    loadBlacklistStats();
+    
+    // Обновление каждые 30 секунд
+    setInterval(loadBlacklistStats, 30000);
+});
+
+function loadBlacklistData() {
+    // Имитация загрузки данных Blacklist
+    blacklistData = [
+        {
+            id: 1,
+            type: 'user',
+            user_id: '123456789',
+            username: '@spam_user',
+            reason: 'USER_BANNED',
+            comment: 'Автоматически добавлен при рассылке',
+            added_at: '2024-01-15 14:30:25',
+            source: 'auto'
+        },
+        {
+            id: 2,
+            type: 'chat',
+            chat_id: '-1001234567890',
+            username: '@forbidden_chat',
+            reason: 'CHAT_FORBIDDEN',
+            comment: 'Чат запретил отправку сообщений',
+            added_at: '2024-01-15 14:25:10',
+            source: 'auto'
+        },
+        {
+            id: 3,
+            type: 'user',
+            user_id: '987654321',
+            username: '@blocked_bot',
+            reason: 'manual',
+            comment: 'Заблокировал бота',
+            added_at: '2024-01-15 14:20:45',
+            source: 'manual'
+        },
+        {
+            id: 4,
+            type: 'channel',
+            chat_id: '-1009876543210',
+            username: '@spam_channel',
+            reason: 'PEER_ID_INVALID',
+            comment: 'Недействительный ID канала',
+            added_at: '2024-01-15 14:15:30',
+            source: 'auto'
+        }
+    ];
+    
+    filteredBlacklist = [...blacklistData];
+    displayBlacklist();
+    updatePagination();
+}
+
+function loadBlacklistStats() {
+    const total = blacklistData.length;
+    const bannedUsers = blacklistData.filter(item => item.type === 'user').length;
+    const forbiddenChats = blacklistData.filter(item => item.type === 'chat' || item.type === 'channel').length;
+    const autoAdded = blacklistData.filter(item => item.source === 'auto').length;
+    
+    document.getElementById('totalBlacklist').textContent = total;
+    document.getElementById('bannedUsers').textContent = bannedUsers;
+    document.getElementById('forbiddenChats').textContent = forbiddenChats;
+    document.getElementById('autoAdded').textContent = autoAdded;
+}
+
+function displayBlacklist() {
+    const tbody = document.querySelector('#blacklistTable tbody');
+    tbody.innerHTML = '';
+    
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageData = filteredBlacklist.slice(startIndex, endIndex);
+    
+    pageData.forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <input type="checkbox" class="blacklist-checkbox" value="${item.id}">
+            </td>
+            <td>${item.id}</td>
+            <td><span class="badge ${getTypeBadgeClass(item.type)}">${getTypeText(item.type)}</span></td>
+            <td>${item.username || item.user_id || item.chat_id}</td>
+            <td><span class="badge ${getReasonBadgeClass(item.reason)}">${getReasonText(item.reason)}</span></td>
+            <td>${formatDate(item.added_at)}</td>
+            <td><span class="badge ${item.source === 'auto' ? 'bg-success' : 'bg-info'}">${item.source === 'auto' ? 'Авто' : 'Ручное'}</span></td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="viewBlacklistItem(${item.id})" title="Просмотр">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="removeFromBlacklist(${item.id})" title="Удалить">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updatePagination() {
+    const totalPages = Math.ceil(filteredBlacklist.length / itemsPerPage);
+    const pagination = document.getElementById('pagination');
+    pagination.innerHTML = '';
+    
+    for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i})">${i}</a>`;
+        pagination.appendChild(li);
+    }
+}
+
+function changePage(page) {
+    currentPage = page;
+    displayBlacklist();
+    updatePagination();
+}
+
+function applyFilters() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const typeFilter = document.getElementById('typeFilter').value;
+    const reasonFilter = document.getElementById('reasonFilter').value;
+    
+    filteredBlacklist = blacklistData.filter(item => {
+        const matchesSearch = !searchTerm || 
+            item.id.toString().includes(searchTerm) ||
+            item.username?.toLowerCase().includes(searchTerm) ||
+            item.reason.toLowerCase().includes(searchTerm) ||
+            item.comment?.toLowerCase().includes(searchTerm);
+        
+        const matchesType = !typeFilter || item.type === typeFilter;
+        const matchesReason = !reasonFilter || item.reason === reasonFilter;
+        
+        return matchesSearch && matchesType && matchesReason;
+    });
+    
+    currentPage = 1;
+    displayBlacklist();
+    updatePagination();
+}
+
+function getTypeBadgeClass(type) {
+    const classes = {
+        'user': 'bg-danger',
+        'chat': 'bg-warning',
+        'channel': 'bg-info'
+    };
+    return classes[type] || 'bg-secondary';
+}
+
+function getTypeText(type) {
+    const texts = {
+        'user': 'Пользователь',
+        'chat': 'Чат',
+        'channel': 'Канал'
+    };
+    return texts[type] || type;
+}
+
+function getReasonBadgeClass(reason) {
+    const classes = {
+        'USER_BANNED': 'bg-danger',
+        'CHAT_FORBIDDEN': 'bg-warning',
+        'PEER_ID_INVALID': 'bg-info',
+        'manual': 'bg-secondary',
+        'spam': 'bg-dark',
+        'blocked': 'bg-primary'
+    };
+    return classes[reason] || 'bg-secondary';
+}
+
+function getReasonText(reason) {
+    const texts = {
+        'USER_BANNED': 'USER_BANNED',
+        'CHAT_FORBIDDEN': 'CHAT_FORBIDDEN',
+        'PEER_ID_INVALID': 'PEER_ID_INVALID',
+        'manual': 'Вручную',
+        'spam': 'Спам',
+        'blocked': 'Заблокировал бота'
+    };
+    return texts[reason] || reason;
+}
+
+function showAddToBlacklistModal() {
+    new bootstrap.Modal(document.getElementById('addToBlacklistModal')).show();
+}
+
+function toggleBlacklistFields() {
+    const type = document.getElementById('blacklistType').value;
+    
+    // Скрываем все поля
+    document.getElementById('userIdField').style.display = 'none';
+    document.getElementById('usernameField').style.display = 'none';
+    document.getElementById('chatIdField').style.display = 'none';
+    
+    // Показываем нужные поля
+    if (type === 'user') {
+        document.getElementById('userIdField').style.display = 'block';
+        document.getElementById('usernameField').style.display = 'block';
+    } else if (type === 'chat' || type === 'channel') {
+        document.getElementById('chatIdField').style.display = 'block';
+        document.getElementById('usernameField').style.display = 'block';
+    }
+}
+
+function addToBlacklist() {
+    const type = document.getElementById('blacklistType').value;
+    const reason = document.getElementById('blacklistReason').value;
+    const comment = document.getElementById('blacklistComment').value;
+    
+    if (!type || !reason) {
+        showNotification('Заполните обязательные поля', 'error');
+        return;
+    }
+    
+    let userId = '';
+    let chatId = '';
+    let username = '';
+    
+    if (type === 'user') {
+        userId = document.getElementById('userId').value;
+        username = document.getElementById('username').value;
+    } else {
+        chatId = document.getElementById('chatId').value;
+        username = document.getElementById('username').value;
+    }
+    
+    if (!userId && !chatId && !username) {
+        showNotification('Введите хотя бы один идентификатор', 'error');
+        return;
+    }
+    
+    const newItem = {
+        id: Date.now(),
+        type: type,
+        user_id: userId,
+        chat_id: chatId,
+        username: username,
+        reason: reason,
+        comment: comment,
+        added_at: new Date().toISOString(),
+        source: 'manual'
+    };
+    
+    blacklistData.unshift(newItem);
+    filteredBlacklist = [...blacklistData];
+    
+    displayBlacklist();
+    updatePagination();
+    loadBlacklistStats();
+    
+    bootstrap.Modal.getInstance(document.getElementById('addToBlacklistModal')).hide();
+    showNotification('Запись добавлена в Blacklist', 'success');
+    
+    // Очищаем форму
+    document.getElementById('addToBlacklistForm').reset();
+    toggleBlacklistFields();
+}
+
+function importBlacklist() {
+    new bootstrap.Modal(document.getElementById('importModal')).show();
+}
+
+function processImport() {
+    const fileInput = document.getElementById('importFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showNotification('Выберите файл для импорта', 'error');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const content = e.target.result;
+            let importedData = [];
+            
+            if (file.name.endsWith('.json')) {
+                importedData = JSON.parse(content);
+            } else if (file.name.endsWith('.csv')) {
+                const lines = content.split('\n');
+                const headers = lines[0].split(',');
+                
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i].trim()) {
+                        const values = lines[i].split(',');
+                        const item = {};
+                        headers.forEach((header, index) => {
+                            item[header.trim()] = values[index]?.trim() || '';
+                        });
+                        importedData.push(item);
+                    }
+                }
+            } else {
+                // TXT файл - простой список
+                const lines = content.split('\n');
+                importedData = lines.filter(line => line.trim()).map((line, index) => ({
+                    id: Date.now() + index,
+                    type: 'user',
+                    username: line.trim(),
+                    reason: 'manual',
+                    comment: 'Импортировано из файла',
+                    added_at: new Date().toISOString(),
+                    source: 'import'
+                }));
+            }
+            
+            // Добавляем импортированные данные
+            importedData.forEach(item => {
+                item.id = Date.now() + Math.random();
+                item.added_at = new Date().toISOString();
+                item.source = 'import';
+            });
+            
+            blacklistData.unshift(...importedData);
+            filteredBlacklist = [...blacklistData];
+            
+            displayBlacklist();
+            updatePagination();
+            loadBlacklistStats();
+            
+            bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
+            showNotification(`Импортировано ${importedData.length} записей`, 'success');
+            
+        } catch (error) {
+            console.error('Ошибка импорта:', error);
+            showNotification('Ошибка при импорте файла', 'error');
+        }
+    };
+    
+    reader.readAsText(file);
+}
+
+function exportBlacklist() {
+    if (blacklistData.length === 0) {
+        showNotification('Нет данных для экспорта', 'warning');
+        return;
+    }
+    
+    const data = blacklistData.map(item => ({
+        'ID': item.id,
+        'Тип': getTypeText(item.type),
+        'Username': item.username || '',
+        'User ID': item.user_id || '',
+        'Chat ID': item.chat_id || '',
+        'Причина': getReasonText(item.reason),
+        'Комментарий': item.comment || '',
+        'Добавлено': formatDate(item.added_at),
+        'Источник': item.source === 'auto' ? 'Авто' : 'Ручное'
+    }));
+    
+    exportToCSV(data, 'blacklist.csv');
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.blacklist-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = true);
+    document.getElementById('selectAllCheckbox').checked = true;
+}
+
+function deselectAll() {
+    const checkboxes = document.querySelectorAll('.blacklist-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = false);
+    document.getElementById('selectAllCheckbox').checked = false;
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.blacklist-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = selectAllCheckbox.checked);
+}
+
+function removeSelected() {
+    const selectedCheckboxes = document.querySelectorAll('.blacklist-checkbox:checked');
+    
+    if (selectedCheckboxes.length === 0) {
+        showNotification('Выберите записи для удаления', 'warning');
+        return;
+    }
+    
+    if (!confirm(`Удалить ${selectedCheckboxes.length} записей из Blacklist?`)) {
+        return;
+    }
+    
+    const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+    
+    blacklistData = blacklistData.filter(item => !selectedIds.includes(item.id));
+    filteredBlacklist = [...blacklistData];
+    
+    displayBlacklist();
+    updatePagination();
+    loadBlacklistStats();
+    
+    showNotification(`Удалено ${selectedIds.length} записей`, 'success');
+}
+
+function removeFromBlacklist(itemId) {
+    if (!confirm('Удалить запись из Blacklist?')) {
+        return;
+    }
+    
+    blacklistData = blacklistData.filter(item => item.id !== itemId);
+    filteredBlacklist = [...blacklistData];
+    
+    displayBlacklist();
+    updatePagination();
+    loadBlacklistStats();
+    
+    showNotification('Запись удалена из Blacklist', 'success');
+}
+
+function viewBlacklistItem(itemId) {
+    const item = blacklistData.find(i => i.id === itemId);
+    if (!item) return;
+    
+    const details = `
+        <strong>ID:</strong> ${item.id}<br>
+        <strong>Тип:</strong> ${getTypeText(item.type)}<br>
+        <strong>Username:</strong> ${item.username || '-'}<br>
+        <strong>User ID:</strong> ${item.user_id || '-'}<br>
+        <strong>Chat ID:</strong> ${item.chat_id || '-'}<br>
+        <strong>Причина:</strong> ${getReasonText(item.reason)}<br>
+        <strong>Комментарий:</strong> ${item.comment || '-'}<br>
+        <strong>Добавлено:</strong> ${formatDate(item.added_at)}<br>
+        <strong>Источник:</strong> ${item.source === 'auto' ? 'Автоматически' : 'Вручную'}
+    `;
+    
+    showNotification(details, 'info', 10000);
+}
+
+// Обработка изменения типа в модальном окне
+document.getElementById('blacklistType').addEventListener('change', toggleBlacklistFields);
+</script>
+{% endblock %}
