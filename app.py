@@ -3007,28 +3007,6 @@ def get_spam_stats(campaign_id):
         logger.error(f"Ошибка получения статистики: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/upload-sessions', methods=['POST'])
-def upload_sessions():
-    """Загрузка сессий из папки"""
-    try:
-        data = request.json
-        folder_path = data.get('folder_path')
-        
-        if not folder_path:
-            return jsonify({'error': 'Не указан путь к папке'}), 400
-        
-        # Загружаем сессии через AccountManager
-        count = account_manager.load_sessions_from_folder(folder_path)
-        
-        return jsonify({
-            'success': True,
-            'count': count,
-            'message': f'Загружено {count} сессий'
-        })
-        
-    except Exception as e:
-        logger.error(f"Ошибка загрузки сессий: {e}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/upload-usernames', methods=['POST'])
 def upload_usernames():
